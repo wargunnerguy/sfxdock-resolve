@@ -1,0 +1,29 @@
+{
+    "name": "sfxdock-resolve",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "description": "SFXDock — open-source sound effects search plugin for DaVinci Resolve Studio",
+    "license": "MIT",
+    "author": "Reimo (Costlio OÜ)",
+    "engines": {
+        "node": ">=22"
+    },
+    "scripts": {
+        "build": "node scripts/build.mjs",
+        "dev-install": "node scripts/dev-install.mjs",
+        "dev:renderer": "vite",
+        "start": "electron ./plugin",
+        "typecheck": "tsc --noEmit && svelte-check --tsconfig ./tsconfig.json"
+    },
+    "devDependencies": {
+        "@sveltejs/vite-plugin-svelte": "^7.2.0",
+        "@types/node": "^22.20.1",
+        "electron": "36.3.2",
+        "esbuild": "^0.28.1",
+        "svelte": "^5.56.6",
+        "svelte-check": "^4.7.3",
+        "typescript": "^5.9.3",
+        "vite": "^8.1.5"
+    }
+}
