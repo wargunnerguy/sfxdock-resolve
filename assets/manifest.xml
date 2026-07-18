@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<BlackmagicDesign>
+    <Plugin>
+        <Id>com.costlio.sfxdock</Id>
+        <Name>SFXDock</Name>
+        <Version>0.1.0</Version>
+        <Description>Sound effects search for DaVinci Resolve Studio</Description>
+        <FilePath>main.js</FilePath>
+    </Plugin>
+</BlackmagicDesign>
