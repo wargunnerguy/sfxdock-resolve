@@ -70,7 +70,7 @@ Only src/resolve/ imports the Resolve/WorkflowIntegration API. Everything else m
 
 src/providers/core/ owns the provider contract and the provider registry. Every provider must pass the contract-conformance test suite in tests/.
 
-Repository layout (top level): plugin/ (deployable plugin folder as Resolve expects — exact layout per Phase 0 audit), src/main/, src/renderer/, src/providers/{core,freesound,pixabay,local}/, src/library/, src/resolve/, src/shared/, assets/, scripts/, installer/, tests/, docs/.
+Repository layout (top level): plugin/ (deployable plugin folder as Resolve expects — Phase 0 confirmed layout: flat folder containing manifest.xml with Id/Name/Version/Description/FilePath, main.js entry point, preload.js, index.html, renderer assets, WorkflowIntegration.node, optional node_modules/; installed by copying into %PROGRAMDATA%\Blackmagic Design\DaVinci Resolve\Support\Workflow Integration Plugins\; full spec in docs/phase0-audit.md §2), src/main/, src/renderer/, src/providers/{core,freesound,pixabay,local}/, src/library/, src/resolve/, src/shared/, assets/, scripts/, installer/, tests/, docs/.
 
 
 
@@ -114,7 +114,7 @@ TypeScript everywhere (main, renderer, providers, library). Strict mode on.
 
 Renderer built with Vite. Keep the renderer framework choice consistent with whatever Phase 1 establishes; do not introduce a second framework.
 
-SQLite via better-sqlite3 (watch Electron-native-module rebuild constraints identified in Phase 0).
+SQLite via better-sqlite3. Phase 0 constraint: it must be built/prebuilt for the pinned Electron ABI below (electron-rebuild or published Electron prebuilds) and rebuilt when a Resolve update bumps Electron. Alternatives (runtime's built-in node:sqlite 3.49.1, or WASM SQLite) are flagged in docs/phase0-audit.md §4; final choice is a Phase 4 decision.
 
 Waveform rendering: WaveSurfer.js.
 
@@ -122,7 +122,7 @@ Follow existing patterns found in the codebase and in the Phase 0 audit report (
 
 Small, reviewable commits per feature. Tests for provider contract conformance and library logic; Resolve-bound code is manually verified inside Resolve.
 
-Node/Electron versions: pinned per Phase 0 findings (the WorkflowIntegration native module may be Electron-version-locked). Record the pin here once known.
+Node/Electron pin (Phase 0, verified against Resolve Studio 21.0.0.48): Resolve hosts its own Electron runtime — plugins never bundle Electron. Runtime: Electron 36.3.2, Node 22.15.1, Chromium 136, Node ABI 135, N-API 10. Dev/test/CI run Node 22.x to match; native deps target Electron 36/ABI 135. WorkflowIntegration.node is an N-API module (ABI-stable); always ship the newest copy from Blackmagic's Examples/SamplePlugin/. Re-verify the pin when Resolve updates (probe: process.versions inside the plugin).
 
 
 
@@ -158,7 +158,7 @@ Phase plan and current status
 
 
 
-Current phase: Phase 0 — not started.
+Current phase: Phase 0 — complete. Next: Phase 1.
 
 
 
@@ -188,5 +188,24 @@ Decisions log
 
 
 
-DateDecisionReason2026-07-19Repo structure locked; only src/resolve/ touches the Resolve APITestability outside Resolve; single failure domain for API risk2026-07-19Phase 4/5 split: library work separated from Media Pool importResolve-API surprises must not contaminate pure app logic; smaller reviewable diffs2026-07-19Preview cache: LRU size cap + TTL sweep + wipe on quit; never evict on search changeRefined searches replay the same sounds; search-triggered eviction discards the most-replayed files2026-07-19Streaming-first preview playback; cache is an optimizationInstant playback without full download2026-07-19No Resolve Sound Library integration; guide users to add the download folder to itSound Library has no API; folder sharing achieves the same outcome2026-07-19Local folder search ships in v1 as a "Local Folders" provider with Owned badgeProvider architecture absorbs it cheaply; proves non-HTTP providers for the authoring guide2026-07-19v1 local indexing is filename-level with manual rescan; watchers/metadata/dupe-detection deferred to v2Scope control — full local indexing is a v2 product2026-07-19Media Pool bin ("SFX") is the one-click import pathOnly automatable integration surface
+| Date | Decision | Reason |
+|---|---|---|
+| 2026-07-19 | Repo structure locked; only src/resolve/ touches the Resolve API | Testability outside Resolve; single failure domain for API risk |
+| 2026-07-19 | Phase 4/5 split: library work separated from Media Pool import | Resolve-API surprises must not contaminate pure app logic; smaller reviewable diffs |
+| 2026-07-19 | Preview cache: LRU size cap + TTL sweep + wipe on quit; never evict on search change | Refined searches replay the same sounds; search-triggered eviction discards the most-replayed files |
+| 2026-07-19 | Streaming-first preview playback; cache is an optimization | Instant playback without full download |
+| 2026-07-19 | No Resolve Sound Library integration; guide users to add the download folder to it | Sound Library has no API; folder sharing achieves the same outcome |
+| 2026-07-19 | Local folder search ships in v1 as a "Local Folders" provider with Owned badge | Provider architecture absorbs it cheaply; proves non-HTTP providers for the authoring guide |
+| 2026-07-19 | v1 local indexing is filename-level with manual rescan; watchers/metadata/dupe-detection deferred to v2 | Scope control — full local indexing is a v2 product |
+| 2026-07-19 | Media Pool bin ("SFX") is the one-click import path | Only automatable integration surface |
+| 2026-07-19 | Plugins ship no Electron runtime; Resolve launches them with its bundled Electron (36.3.2 in Resolve 21.0.0.48) | Phase 0 finding |
+| 2026-07-19 | Toolchain pin: Electron 36.3.2 / Node 22.15.1 / Chromium 136 / ABI 135 / N-API 10; dev+CI on Node 22.x; native deps built for Electron 36 | Phase 0 finding |
+| 2026-07-19 | Plugin process model: sandboxed renderer + context isolation (Electron defaults, BMD-recommended since 19.0.2); WorkflowIntegration.node lives in the main process behind typed IPC | Phase 0 finding |
+| 2026-07-19 | Plugin folder layout + manifest schema confirmed (5-field manifest.xml, FilePath entry point, flat folder in the plugins root; folder name need not equal plugin Id) | Phase 0 finding |
+| 2026-07-19 | Bins cannot be renamed via API (Folder.SetName absent) — changing the configured bin name means creating a new bin, never renaming | Phase 0 finding |
+| 2026-07-19 | No project/timeline change events exist (only RenderStart/RenderStop/ResolveQuit callbacks) — SFXDock polls GetCurrentProject().GetUniqueId() for project context | Phase 0 finding |
+| 2026-07-19 | Sound Library API confirmed absent at runtime (0 of 194 enumerated method names match /sound/i) — existing no-integration decision stands on verified ground | Phase 0 finding |
+| 2026-07-19 | Clip metadata is writable post-import (SetMetadata / SetThirdPartyMetadata verified round-trip) — license + attribution get stamped onto Media Pool clips at import | Phase 0 finding |
+| 2026-07-19 | All SFXDock-required Media Pool calls verified working in-Resolve (create bin, set current folder, ImportMedia, AddItemListToMediaPool, clip rename, DeleteClips, DeleteFolders); full pass/fail table in docs/phase0-audit.md §3.3 | Phase 0 finding |
+| 2026-07-19 | Guard every session with SetAPITimeout (API calls block while Resolve shows modal dialogs); handle the ResolveQuit callback for graceful shutdown | Phase 0 finding |
 
