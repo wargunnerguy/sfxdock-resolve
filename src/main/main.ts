@@ -13,6 +13,26 @@ let pollTimer: ReturnType<typeof setInterval> | null = null;
 let refreshing = false;
 let quitHookRegistered = false;
 
+let shuttingDown = false;
+
+// Shutdown must NOT call WorkflowIntegration.CleanUp(): on Resolve 21 /
+// module v2.0.0 it blocks the main thread forever, leaking the process and
+// locking WorkflowIntegration.node on disk (verified 2026-07-19; Blackmagic's
+// own sample leaks the same way). Process exit severs the host connection
+// safely — Resolve is unaffected. Graceful quit first, force-exit fallback
+// because the native module can keep the event loop alive.
+function shutdown(): void {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+    }
+    const forceExit = setTimeout(() => app.exit(0), 800);
+    forceExit.unref?.();
+    app.quit();
+}
+
 async function refreshState(): Promise<void> {
     if (refreshing) return;
     refreshing = true;
@@ -20,7 +40,7 @@ async function refreshState(): Promise<void> {
         if (!bridge.connected) {
             await bridge.connect(PLUGIN_ID);
             if (bridge.connected && !quitHookRegistered) {
-                bridge.onResolveQuit(() => app.quit());
+                bridge.onResolveQuit(shutdown);
                 quitHookRegistered = true;
             }
         }
@@ -58,7 +78,7 @@ function createWindow(): void {
     win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
     win.on('closed', () => {
         win = null;
-        app.quit();
+        shutdown();
     });
 }
 
@@ -73,11 +93,7 @@ app.whenReady().then(() => {
     pollTimer = setInterval(() => void refreshState(), POLL_MS);
 });
 
-// Panel app: window closed means quit, on every platform. Lingering plugin
-// processes lock WorkflowIntegration.node (Phase 0 finding) — exit cleanly.
-app.on('window-all-closed', () => app.quit());
+// Panel app: window closed means quit, on every platform.
+app.on('window-all-closed', shutdown);
 
-app.on('will-quit', () => {
-    if (pollTimer) clearInterval(pollTimer);
-    bridge.cleanup();
-});
+app.on('will-quit', shutdown);

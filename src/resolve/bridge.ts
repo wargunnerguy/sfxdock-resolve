@@ -74,12 +74,8 @@ export class ResolveBridge {
         }
     }
 
-    cleanup(): void {
-        try {
-            this.wi?.CleanUp();
-        } catch {
-            // best effort on shutdown
-        }
-        this.resolveApp = null;
-    }
+    // NOTE: deliberately no cleanup()/CleanUp() call anywhere. Blackmagic's
+    // docs say to call WorkflowIntegration.CleanUp() on quit, but on Resolve
+    // 21 (module v2.0.0) it blocks the main thread forever and leaks the
+    // process (verified 2026-07-19). Plain process exit is safe.
 }
