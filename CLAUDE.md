@@ -160,7 +160,7 @@ Phase plan and current status
 
 
 
-Current phase: Phase 2 — complete. Next: Phase 3.
+Current phase: Phase 3 — complete. Next: Phase 4.
 
 
 
