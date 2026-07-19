@@ -14,6 +14,7 @@
         "dev-install": "node scripts/dev-install.mjs",
         "dev:renderer": "vite",
         "start": "electron ./plugin",
+        "test": "vitest run",
         "typecheck": "tsc --noEmit && svelte-check --tsconfig ./tsconfig.json"
     },
     "devDependencies": {
@@ -24,6 +25,7 @@
         "svelte": "^5.56.6",
         "svelte-check": "^4.7.3",
         "typescript": "^5.9.3",
-        "vite": "^8.1.5"
+        "vite": "^8.1.5",
+        "vitest": "^4.1.10"
     }
 }
