@@ -7,8 +7,13 @@ import { registry, runSearch } from './search';
 import { settings } from './settings';
 
 // Must run before app ready: the preview protocol needs stream privileges.
+// 'standard' gives the scheme proper host/path URL semantics; without it and
+// supportFetchAPI, Chromium's media stack can refuse to load the source.
 protocol.registerSchemesAsPrivileged([
-    { scheme: 'sfx-preview', privileges: { secure: true, stream: true } },
+    {
+        scheme: 'sfx-preview',
+        privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true },
+    },
 ]);
 
 const previewCache = new PreviewCache();
@@ -97,11 +102,15 @@ app.whenReady().then(() => {
     previewCache.init();
 
     // sfx-preview://<providerId>/<soundId> → cached or proxied preview stream.
-    protocol.handle('sfx-preview', (request) => {
+    protocol.handle('sfx-preview', async (request) => {
         const url = new URL(request.url);
         const providerId = url.host;
         const soundId = decodeURIComponent(url.pathname.replace(/^\//, ''));
-        return previewCache.handleRequest(providerId, soundId);
+        try {
+            return await previewCache.handleRequest(providerId, soundId);
+        } catch {
+            return new Response('Preview handler error', { status: 500 });
+        }
     });
 
     ipcMain.handle(IPC.getState, () => current);

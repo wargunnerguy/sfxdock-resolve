@@ -161,7 +161,11 @@
                         <div class="result-body">
                             <div class="result-top">
                                 <span class="title" title={r.title}>{r.title}</span>
-                                <span class="badge badge-{r.badge}">{BADGE_LABEL[r.badge] ?? r.badge}</span>
+                                <span
+                                    class="badge badge-{r.badge}"
+                                    title={r.badge === 'login-required'
+                                        ? 'Previews play free — the badge means full-quality download needs a Freesound login (coming with OAuth in a later phase)'
+                                        : undefined}>{BADGE_LABEL[r.badge] ?? r.badge}</span>
                             </div>
                             {#if r.waveform.type === 'provided'}
                                 <img class="waveform" src={r.waveform.url} alt="" draggable="false" />
