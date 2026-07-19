@@ -116,7 +116,7 @@ TypeScript everywhere (main, renderer, providers, library). Strict mode on.
 
 Renderer: Svelte 5 (runes) built with Vite — established in Phase 1; do not introduce a second framework. TypeScript pinned to 5.x (svelte-check 4 is incompatible with TypeScript 7).
 
-SQLite via better-sqlite3. Phase 0 constraint: it must be built/prebuilt for the pinned Electron ABI below (electron-rebuild or published Electron prebuilds) and rebuilt when a Resolve update bumps Electron. Alternatives (runtime's built-in node:sqlite 3.49.1, or WASM SQLite) are flagged in docs/phase0-audit.md §4; final choice is a Phase 4 decision.
+SQLite via the runtime's built-in node:sqlite (DatabaseSync) — Phase 4 decision, replacing the tentative better-sqlite3 plan. Verified working with no flag under both Electron 36.3.2 (Resolve's runtime, SQLite 3.49.1) and the test runner's Node. This eliminates the native-module rebuild / Electron-ABI-lock risk the Phase 0 audit flagged entirely — nothing to rebuild when Resolve bumps Electron. node:sqlite is experimental in Node 22, so re-verify on Resolve updates (the sqlite-probe pattern in scratch/).
 
 Waveform rendering: WaveSurfer.js.
 
@@ -222,4 +222,11 @@ Decisions log
 | 2026-07-19 | Pixabay dropped from v1: its public API exposes only /api/ (images) and /api/videos/ — no audio endpoints (verified live). Scraping/undocumented endpoints rejected (ToS, fragility). Jamendo (music, API v3, client_id-as-apiKey) replaces it as the second remote provider | Maintainer decision on Phase 3 finding |
 | 2026-07-19 | Content-type dimension added to the provider contract: providers declare contentTypes ('sfx'/'music'), registry filters by it, UI gets an All/SFX/Music switch. Freesound = sfx, Jamendo = music, Local Folders = both | Maintainer requirement |
 | 2026-07-19 | Waveform contract gains a 'peaks' variant (amplitude array drawn client-side on canvas) — Jamendo ships peaks data; decode-from-audio rendering deferred to Phase 4 where Local Folders actually needs it. RawSoundResult gains optional provider-private 'extra' (e.g., Jamendo's per-track download URL) | Phase 3 decision |
+| 2026-07-19 | SQLite via node:sqlite (built-in), NOT better-sqlite3 — verified working with no flag under Electron 36 and the test Node. Eliminates the native-rebuild/ABI-lock risk entirely | Phase 4 finding |
+| 2026-07-19 | Download auth-gated by descriptor.requiredAuth vs current auth: Jamendo (apiKey) downloads now; Freesound (oauth2) reports 'login-required' until Phase 6. No preview-quality fallback download — full-quality only, when auth allows | Phase 4 decision |
+| 2026-07-19 | Local Folders provider is a factory (createLocalProvider(library)) injecting the LocalIndex, keeping ProviderContext clean; it's the built-in non-HTTP provider. Community HTTP providers still only need ctx.fetch | Phase 4 decision |
+| 2026-07-19 | Ownership/library-first handled in the app layer: registry takes an ownedCheck for the central 'owned' badge fact; runSearch sorts owned-first. Local search dedupes a download against a watched copy of the same path (rich record wins) | Phase 4 decision |
+| 2026-07-19 | Local file previews stream from disk through the same sfx-preview:// protocol (file: URLs handled directly, uncached); local waveforms decoded client-side via Web Audio (RenderedWaveform) | Phase 4 decision |
+| 2026-07-19 | Downloads folder defaults to Documents/SFXDock (findable — Phase 6 wizard points users to add it to Resolve's Sound Library), pre-registered as the non-removable watched folder | Phase 4 decision |
+| 2026-07-19 | Embedding license/attribution metadata INTO downloaded files (ID3 etc.) deferred past Phase 4 — attribution is fully captured in the SQLite index and copy/export; file-embedding lands with the Sound Library wizard work | Phase 4 scope note |
 

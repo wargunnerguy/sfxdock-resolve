@@ -2,6 +2,7 @@
 
 import type { ContentType, SoundResult } from '../providers/core/types';
 import type { ProviderFailure } from '../providers/core/registry';
+import type { WatchedFolder } from '../library/types';
 
 export const IPC = {
     getState: 'sfxdock:get-state',
@@ -10,6 +11,12 @@ export const IPC = {
     search: 'sfxdock:search',
     getKeyStatus: 'sfxdock:get-key-status',
     setProviderKey: 'sfxdock:set-provider-key',
+    download: 'sfxdock:download',
+    getAttribution: 'sfxdock:get-attribution',
+    listWatchedFolders: 'sfxdock:list-watched-folders',
+    addWatchedFolder: 'sfxdock:add-watched-folder',
+    removeWatchedFolder: 'sfxdock:remove-watched-folder',
+    rescan: 'sfxdock:rescan',
 } as const;
 
 export interface SearchResponse {
@@ -19,6 +26,23 @@ export interface SearchResponse {
 
 /** providerId -> whether a key is stored. Keys themselves never cross IPC. */
 export type KeyStatus = Record<string, boolean>;
+
+export type DownloadOutcome =
+    | { status: 'ok'; filePath: string }
+    | { status: 'already-owned'; filePath?: string }
+    | { status: 'login-required'; message: string }
+    | { status: 'error'; message: string };
+
+export interface FoldersView {
+    folders: WatchedFolder[];
+    downloadsDir: string;
+}
+
+export interface RescanView {
+    added: number;
+    removed: number;
+    scannedFolders: number;
+}
 
 export interface ConnectionState {
     connected: boolean;
@@ -37,4 +61,10 @@ export interface SfxdockApi {
     search(query: string, contentType?: ContentType): Promise<SearchResponse>;
     getKeyStatus(): Promise<KeyStatus>;
     setProviderKey(providerId: string, key: string): Promise<KeyStatus>;
+    download(sound: SoundResult, query: string): Promise<DownloadOutcome>;
+    getAttribution(sound: SoundResult): Promise<string>;
+    listWatchedFolders(): Promise<FoldersView>;
+    addWatchedFolder(): Promise<FoldersView>;
+    removeWatchedFolder(id: number): Promise<FoldersView>;
+    rescan(): Promise<RescanView>;
 }

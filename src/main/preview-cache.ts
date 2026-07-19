@@ -10,6 +10,7 @@ import { app } from 'electron';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
@@ -55,6 +56,14 @@ export class PreviewCache {
     /** Serves sfx-preview://<providerId>/<soundId> requests. */
     async handleRequest(providerId: string, soundId: string): Promise<Response> {
         const key = this.key(providerId, soundId);
+
+        const remote = this.remoteUrls.get(key);
+
+        // Local Folders previews are already on disk — stream directly, no cache.
+        if (remote && remote.startsWith('file:')) {
+            return streamLocalFile(remote);
+        }
+
         const entry = this.index.get(key);
         if (entry) {
             entry.lastAccess = Date.now();
@@ -64,7 +73,6 @@ export class PreviewCache {
             });
         }
 
-        const remote = this.remoteUrls.get(key);
         if (!remote) return new Response('Unknown preview id', { status: 404 });
 
         let upstream: Response;
@@ -137,4 +145,29 @@ export class PreviewCache {
             }
         }
     }
+}
+
+const AUDIO_MIME: Record<string, string> = {
+    wav: 'audio/wav',
+    mp3: 'audio/mpeg',
+    ogg: 'audio/ogg',
+    flac: 'audio/flac',
+    m4a: 'audio/mp4',
+    aac: 'audio/aac',
+    opus: 'audio/opus',
+    aif: 'audio/aiff',
+    aiff: 'audio/aiff',
+};
+
+function streamLocalFile(fileUrl: string): Response {
+    let filePath: string;
+    try {
+        filePath = fileURLToPath(fileUrl);
+    } catch {
+        return new Response('Bad file url', { status: 400 });
+    }
+    if (!fs.existsSync(filePath)) return new Response('File not found', { status: 404 });
+    const ext = filePath.slice(filePath.lastIndexOf('.') + 1).toLowerCase();
+    const stream = Readable.toWeb(fs.createReadStream(filePath)) as ReadableStream;
+    return new Response(stream, { headers: { 'Content-Type': AUDIO_MIME[ext] ?? 'application/octet-stream' } });
 }

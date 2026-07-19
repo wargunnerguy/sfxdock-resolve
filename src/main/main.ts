@@ -1,10 +1,12 @@
-import { app, BrowserWindow, ipcMain, protocol } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, protocol } from 'electron';
 import path from 'node:path';
-import { IPC, type ConnectionState } from '../shared/ipc';
+import { IPC, type ConnectionState, type FoldersView } from '../shared/ipc';
+import type { SoundResult } from '../providers/core/types';
 import { ResolveBridge } from '../resolve/bridge';
 import { PreviewCache } from './preview-cache';
-import { registry, runSearch } from './search';
+import { attributionFor, download, initSearch, registry, runSearch } from './search';
 import { settings } from './settings';
+import type { Library } from '../library/library';
 
 // Must run before app ready: the preview protocol needs stream privileges.
 // 'standard' gives the scheme proper host/path URL semantics; without it and
@@ -17,6 +19,12 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 const previewCache = new PreviewCache();
+let library: Library;
+let downloadsDir: string;
+
+function foldersView(): FoldersView {
+    return { folders: library.listWatchedFolders(), downloadsDir };
+}
 
 const PLUGIN_ID = 'com.costlio.sfxdock';
 const POLL_MS = 2000;
@@ -100,6 +108,7 @@ function createWindow(): void {
 app.whenReady().then(() => {
     settings.load();
     previewCache.init();
+    ({ library, downloadsDir } = initSearch());
 
     // sfx-preview://<providerId>/<soundId> → cached or proxied preview stream.
     protocol.handle('sfx-preview', async (request) => {
@@ -125,11 +134,34 @@ app.whenReady().then(() => {
             previewCache,
         ),
     );
-    ipcMain.handle(IPC.getKeyStatus, () => settings.keyStatus(registry.all().map((p) => p.id)));
+    // Only remote providers have keys; the local provider is authless.
+    const keyedProviders = () => registry.all().filter((p) => p.authType !== 'none').map((p) => p.id);
+    ipcMain.handle(IPC.getKeyStatus, () => settings.keyStatus(keyedProviders()));
     ipcMain.handle(IPC.setProviderKey, (_event, providerId: string, key: string) => {
         settings.setProviderKey(String(providerId), String(key));
-        return settings.keyStatus(registry.all().map((p) => p.id));
+        return settings.keyStatus(keyedProviders());
     });
+
+    ipcMain.handle(IPC.download, (_event, sound: SoundResult, query: string) => download(sound, String(query)));
+    ipcMain.handle(IPC.getAttribution, (_event, sound: SoundResult) => attributionFor(sound));
+
+    ipcMain.handle(IPC.listWatchedFolders, () => foldersView());
+    ipcMain.handle(IPC.addWatchedFolder, async () => {
+        const result = await dialog.showOpenDialog({
+            title: 'Add a folder to watch',
+            properties: ['openDirectory'],
+        });
+        if (!result.canceled && result.filePaths[0]) {
+            library.addWatchedFolder(result.filePaths[0]);
+            library.rescan();
+        }
+        return foldersView();
+    });
+    ipcMain.handle(IPC.removeWatchedFolder, (_event, id: number) => {
+        library.removeWatchedFolder(Number(id));
+        return foldersView();
+    });
+    ipcMain.handle(IPC.rescan, () => library.rescan());
 
     createWindow();
     void refreshState();

@@ -1,11 +1,13 @@
 <script lang="ts">
-    import type { ConnectionState, KeyStatus, SearchResponse } from '../shared/ipc';
+    import type { ConnectionState, FoldersView, KeyStatus, SearchResponse, DownloadOutcome } from '../shared/ipc';
     import type { ContentType, SoundResult } from '../providers/core/types';
     import WaveformPeaks from './WaveformPeaks.svelte';
+    import RenderedWaveform from './RenderedWaveform.svelte';
 
     let conn = $state<ConnectionState>({ connected: false });
     let pinned = $state(false);
     let query = $state('');
+    let lastQuery = $state('');
     let contentFilter = $state<'all' | ContentType>('all');
     let searching = $state(false);
     let response = $state<SearchResponse | null>(null);
@@ -15,6 +17,10 @@
     let jamendoKeyInput = $state('');
     let keySaved = $state(false);
     let playingId = $state<string | null>(null);
+    let folders = $state<FoldersView>({ folders: [], downloadsDir: '' });
+    let rescanMsg = $state('');
+    // per-result transient status: 'downloading' | 'owned' | 'copied' | error text
+    let itemStatus = $state<Record<string, string>>({});
 
     const audio = new Audio();
     audio.addEventListener('ended', () => (playingId = null));
@@ -27,6 +33,7 @@
         }
         window.sfxdock.getState().then((s) => (conn = s));
         window.sfxdock.getKeyStatus().then((s) => (keyStatus = s));
+        window.sfxdock.listWatchedFolders().then((f) => (folders = f));
         return window.sfxdock.onStateChanged((s) => (conn = s));
     });
 
@@ -42,11 +49,63 @@
         const q = query.trim();
         if (!q || !window.sfxdock || searching) return;
         searching = true;
+        itemStatus = {};
         try {
             response = await window.sfxdock.search(q, contentFilter === 'all' ? undefined : contentFilter);
+            lastQuery = q;
         } finally {
             searching = false;
         }
+    }
+
+    async function downloadResult(r: SoundResult) {
+        if (!window.sfxdock) return;
+        const id = keyFor(r);
+        itemStatus = { ...itemStatus, [id]: 'downloading' };
+        let outcome: DownloadOutcome;
+        try {
+            outcome = await window.sfxdock.download(r, lastQuery);
+        } catch (e) {
+            outcome = { status: 'error', message: e instanceof Error ? e.message : String(e) };
+        }
+        const label =
+            outcome.status === 'ok'
+                ? 'owned'
+                : outcome.status === 'already-owned'
+                  ? 'owned'
+                  : outcome.status === 'login-required'
+                    ? 'login needed'
+                    : outcome.message;
+        itemStatus = { ...itemStatus, [id]: label };
+        if (outcome.status === 'ok' || outcome.status === 'already-owned') r.badge = 'owned';
+    }
+
+    async function copyAttribution(r: SoundResult) {
+        if (!window.sfxdock) return;
+        const text = await window.sfxdock.getAttribution(r);
+        try {
+            await navigator.clipboard.writeText(text);
+            itemStatus = { ...itemStatus, [keyFor(r)]: 'copied' };
+            setTimeout(() => (itemStatus = { ...itemStatus, [keyFor(r)]: '' }), 1800);
+        } catch {
+            itemStatus = { ...itemStatus, [keyFor(r)]: 'copy failed' };
+        }
+    }
+
+    async function addFolder() {
+        if (!window.sfxdock) return;
+        folders = await window.sfxdock.addWatchedFolder();
+    }
+    async function removeFolder(id: number) {
+        if (!window.sfxdock) return;
+        folders = await window.sfxdock.removeWatchedFolder(id);
+    }
+    async function rescan() {
+        if (!window.sfxdock) return;
+        rescanMsg = 'Rescanning…';
+        const res = await window.sfxdock.rescan();
+        rescanMsg = `Indexed ${res.added} file${res.added === 1 ? '' : 's'} across ${res.scannedFolders} folder${res.scannedFolders === 1 ? '' : 's'}.`;
+        setTimeout(() => (rescanMsg = ''), 4000);
     }
 
     function setFilter(f: 'all' | ContentType) {
@@ -146,6 +205,26 @@
                 <button onclick={() => saveKey('jamendo', jamendoKeyInput)}>{keySaved ? 'Saved' : 'Save'}</button>
             </div>
             <p class="hint">Get a free client ID at devportal.jamendo.com — keys are stored only on this computer.</p>
+
+            <h2 class="section-gap">Local folders</h2>
+            <ul class="folder-list">
+                {#each folders.folders as f (f.id)}
+                    <li>
+                        <span class="folder-path" title={f.path}>{f.path}</span>
+                        {#if f.removable}
+                            <button class="mini" onclick={() => removeFolder(f.id)}>Remove</button>
+                        {:else}
+                            <span class="folder-tag">downloads</span>
+                        {/if}
+                    </li>
+                {/each}
+            </ul>
+            <div class="folder-actions">
+                <button onclick={addFolder}>Add folder…</button>
+                <button onclick={rescan}>Rescan</button>
+                {#if rescanMsg}<span class="hint inline">{rescanMsg}</span>{/if}
+            </div>
+            <p class="hint">Downloads are saved to your non-removable folder and indexed automatically.</p>
         </section>
     {/if}
 
@@ -203,12 +282,34 @@
                             {:else if r.waveform.type === 'peaks'}
                                 <WaveformPeaks peaks={r.waveform.peaks} />
                             {:else}
-                                <div class="waveform placeholder"></div>
+                                <RenderedWaveform providerId={r.providerId} soundId={r.soundId} />
                             {/if}
                             <div class="result-meta">
-                                {formatDuration(r.durationSec)}
-                                {#if r.author}· {r.author}{/if}
-                                · {r.providerId}
+                                <span>
+                                    {formatDuration(r.durationSec)}
+                                    {#if r.author}· {r.author}{/if}
+                                    · {r.providerId}
+                                </span>
+                                <span class="result-actions">
+                                    {#if itemStatus[keyFor(r)] === 'copied'}
+                                        <span class="ok-text">copied ✓</span>
+                                    {:else}
+                                        <button class="mini" onclick={() => copyAttribution(r)}>Copy attribution</button>
+                                    {/if}
+                                    {#if r.providerId !== 'local'}
+                                        {#if r.badge === 'owned' || itemStatus[keyFor(r)] === 'owned'}
+                                            <span class="ok-text">owned ✓</span>
+                                        {:else if itemStatus[keyFor(r)] === 'downloading'}
+                                            <span class="hint inline">downloading…</span>
+                                        {:else if itemStatus[keyFor(r)] === 'login needed'}
+                                            <span class="warn-text" title="Full download needs login (OAuth, a later phase)">login needed</span>
+                                        {:else if itemStatus[keyFor(r)]}
+                                            <span class="warn-text" title={itemStatus[keyFor(r)]}>failed</span>
+                                        {:else}
+                                            <button class="mini" onclick={() => downloadResult(r)}>Download</button>
+                                        {/if}
+                                    {/if}
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -448,6 +549,68 @@
     .result-meta {
         font-size: 11px;
         color: #888;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
+    .result-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: none;
+    }
+    .mini {
+        padding: 2px 8px;
+        font-size: 10px;
+        border-radius: 4px;
+    }
+    .ok-text {
+        color: #7fcf7f;
+        font-size: 10px;
+    }
+    .warn-text {
+        color: #cfb27f;
+        font-size: 10px;
+        cursor: help;
+    }
+    .inline {
+        margin: 0;
+    }
+    .section-gap {
+        margin-top: 16px;
+    }
+    .folder-list {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 8px;
+        font-size: 11px;
+    }
+    .folder-list li {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 0;
+        border-bottom: 1px solid #303030;
+    }
+    .folder-path {
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: #bbb;
+    }
+    .folder-tag {
+        font-size: 9px;
+        color: #7a8aa0;
+        border: 1px solid #3c4a5f;
+        border-radius: 8px;
+        padding: 1px 6px;
+    }
+    .folder-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
     }
     .status {
         background: #262626;

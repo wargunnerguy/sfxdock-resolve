@@ -39,6 +39,7 @@ export class ProviderRegistry {
         query: string,
         options: SearchOptions,
         ctxFor: (provider: Provider) => ProviderContext,
+        ownedCheck?: (providerId: string, soundId: string) => boolean,
     ): Promise<MergedSearchResult> {
         const merged: MergedSearchResult = { results: [], errors: [] };
         const active = this.all().filter(
@@ -48,7 +49,10 @@ export class ProviderRegistry {
             active.map(async (provider) => {
                 const ctx = ctxFor(provider);
                 const raw = await provider.search(query, options, ctx);
-                return raw.map<SoundResult>((r) => ({ ...r, badge: deriveBadge(provider, ctx) }));
+                return raw.map<SoundResult>((r) => ({
+                    ...r,
+                    badge: deriveBadge(provider, ctx, { owned: ownedCheck?.(r.providerId, r.soundId) ?? false }),
+                }));
             }),
         );
         active.forEach((provider, i) => {

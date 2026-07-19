@@ -12,6 +12,12 @@ const api: SfxdockApi = {
     search: (query, contentType) => ipcRenderer.invoke(IPC.search, query, contentType),
     getKeyStatus: () => ipcRenderer.invoke(IPC.getKeyStatus),
     setProviderKey: (providerId, key) => ipcRenderer.invoke(IPC.setProviderKey, providerId, key),
+    download: (sound, query) => ipcRenderer.invoke(IPC.download, sound, query),
+    getAttribution: (sound) => ipcRenderer.invoke(IPC.getAttribution, sound),
+    listWatchedFolders: () => ipcRenderer.invoke(IPC.listWatchedFolders),
+    addWatchedFolder: () => ipcRenderer.invoke(IPC.addWatchedFolder),
+    removeWatchedFolder: (id) => ipcRenderer.invoke(IPC.removeWatchedFolder, id),
+    rescan: () => ipcRenderer.invoke(IPC.rescan),
 };
 
 contextBridge.exposeInMainWorld('sfxdock', api);
