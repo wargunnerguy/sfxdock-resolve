@@ -34,7 +34,7 @@ Core product facts (locked — do not re-litigate)
 
 
 
-Providers, v1: Freesound (API key for search/previews; OAuth2 for full-quality downloads) and Pixabay Sound Effects (API key). Plus the built-in Local Folders provider (see below). All searched in parallel from one search box; results merged into one list.
+Providers, v1: Freesound (sound effects; API key for search/previews; OAuth2 for full-quality downloads) and Jamendo (music; API v3 client_id as apiKey). Plus the built-in Local Folders provider (see below). All searched in parallel from one search box; results merged into one list, filterable by content type (All / SFX / Music) — providers declare which content types they serve. Pixabay was dropped 2026-07-19: its public API has no audio endpoints (verified: only /api/ images and /api/videos/ exist despite marketing claims); revisit only if Pixabay publishes an audio API. Never work around a missing API by scraping.
 
 Pluggable provider architecture is the project's main open-source selling point. A community member adds a provider by writing one module under src/providers/<name>/ and registering it — nothing else. If adding a provider requires touching code outside its own folder and the registry, the interface is broken and must be fixed.
 
@@ -70,7 +70,7 @@ Only src/resolve/ imports the Resolve/WorkflowIntegration API. Everything else m
 
 src/providers/core/ owns the provider contract and the provider registry. Every provider must pass the contract-conformance test suite in tests/.
 
-Repository layout (top level): plugin/ (deployable plugin folder as Resolve expects — Phase 0 confirmed layout: flat folder containing manifest.xml with Id/Name/Version/Description/FilePath, main.js entry point, preload.js, index.html, renderer assets, WorkflowIntegration.node, optional node_modules/; installed by copying into %PROGRAMDATA%\Blackmagic Design\DaVinci Resolve\Support\Workflow Integration Plugins\; full spec in docs/phase0-audit.md §2), src/main/, src/renderer/, src/providers/{core,freesound,pixabay,local}/, src/library/, src/resolve/, src/shared/, assets/, scripts/, installer/, tests/, docs/.
+Repository layout (top level): plugin/ (deployable plugin folder as Resolve expects — Phase 0 confirmed layout: flat folder containing manifest.xml with Id/Name/Version/Description/FilePath, main.js entry point, preload.js, index.html, renderer assets, WorkflowIntegration.node, optional node_modules/; installed by copying into %PROGRAMDATA%\Blackmagic Design\DaVinci Resolve\Support\Workflow Integration Plugins\; full spec in docs/phase0-audit.md §2), src/main/, src/renderer/, src/providers/{core,freesound,jamendo,local}/, src/library/, src/resolve/, src/shared/, assets/, scripts/, installer/, tests/, docs/.
 
 
 
@@ -92,7 +92,9 @@ authType: none | apiKey | oauth2 (auth for search/preview) and downloadAuthType 
 
 search(query, options, ctx) → normalized raw result list: { providerId, soundId, title, author?, durationSec, license, previewUrl, waveform } — providers return NO badge; the registry decorates results with the centrally derived badge. ctx is an injectable ProviderContext { apiKey, hasOAuth, fetch } so providers are testable without network or credentials.
 
-waveform: either { type: 'provided', url } or { type: 'render' } (client renders from preview audio)
+waveform: { type: 'provided', url } (image asset), { type: 'peaks', peaks: number[] } (amplitude data, drawn client-side — Jamendo ships this), or { type: 'render' } (client renders from preview audio; implemented in Phase 4 for Local Folders)
+
+contentTypes: non-empty array of 'sfx' | 'music' — what the provider serves; the registry skips providers that don't match the active content-type filter
 
 getDownload(sound) → download descriptor (URL + required auth level), or no-op for local sources
 
@@ -170,11 +172,11 @@ Phase 1 — Skeleton plugin: repo scaffolding, build tooling, minimal SFXDock pa
 
 Phase 2 — Provider interface + Freesound: provider contract + conformance tests; Freesound with apiKey auth: search, results, streaming preview playback, preview cache (policy above), provided waveforms, Free/Login-required badges, minimal key-entry field (full wizard is Phase 6).
 
-Phase 3 — Pixabay provider: pure plugin proof — touches only providers/pixabay/ + registry; parallel multi-provider search with merged results; client-side waveform rendering path.
+Phase 3 — Jamendo provider (music): pure plugin proof — touches only providers/jamendo/ + registry; parallel multi-provider search with merged results; content-type filter (All / SFX / Music) in contract and UI; peaks-based client-side waveform drawing. (Originally Pixabay; replaced 2026-07-19 — no audio API.)
 
 Phase 4 — Downloads + local library + Local Folders provider: download manager, SQLite index (downloads + watched-folder entries), library-first search, dedupe, per-sound copy-attribution, watched-folder settings with manual Rescan, Owned badge.
 
-Phase 5 — Media Pool import + project attribution export: one-click import into the "SFX" bin via the confirmed API surface; per-project attribution list export. All Resolve-API risk lives here.
+Phase 5 — Media Pool import + project attribution export: one-click import into the "SFX" bin via the confirmed API surface; per-project attribution list export; evaluate native drag-out from the panel (Electron webContents.startDrag with the downloaded file) so users can drag a sound directly onto the timeline like a file from Explorer — bin import stays the guaranteed path. All Resolve-API risk lives here.
 
 Phase 6 — Freesound OAuth2 + settings + first-run wizard: OAuth2 full-quality downloads with local token storage; full settings screen (keys, download folder, bin name, watched folders); first-run wizard including obtaining free API keys and adding the download folder to Resolve's Sound Library; auth-aware badges.
 
@@ -217,4 +219,7 @@ Decisions log
 | 2026-07-19 | Preview playback via custom sfx-preview:// protocol in the main process: streams upstream audio to the player while tee-ing into the disk cache; renderer CSP stays locked (media only from sfx-preview:) and remote URLs never reach the renderer | Phase 2 decision |
 | 2026-07-19 | Provider API keys in plain JSON in userData for v1; keys never cross IPC (status booleans only); OAuth tokens get keychain/encrypted storage in Phase 6 | Phase 2 decision |
 | 2026-07-19 | Badge tooltip clarifies that Login required refers to full-quality download cost — previews always play free; verified in user testing that this needs explaining | Phase 2 finding |
+| 2026-07-19 | Pixabay dropped from v1: its public API exposes only /api/ (images) and /api/videos/ — no audio endpoints (verified live). Scraping/undocumented endpoints rejected (ToS, fragility). Jamendo (music, API v3, client_id-as-apiKey) replaces it as the second remote provider | Maintainer decision on Phase 3 finding |
+| 2026-07-19 | Content-type dimension added to the provider contract: providers declare contentTypes ('sfx'/'music'), registry filters by it, UI gets an All/SFX/Music switch. Freesound = sfx, Jamendo = music, Local Folders = both | Maintainer requirement |
+| 2026-07-19 | Waveform contract gains a 'peaks' variant (amplitude array drawn client-side on canvas) — Jamendo ships peaks data; decode-from-audio rendering deferred to Phase 4 where Local Folders actually needs it. RawSoundResult gains optional provider-private 'extra' (e.g., Jamendo's per-track download URL) | Phase 3 decision |
 

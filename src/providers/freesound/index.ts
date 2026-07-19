@@ -39,6 +39,7 @@ export const freesoundProvider: Provider = {
     homepageUrl: 'https://freesound.org',
     authType: 'apiKey',
     downloadAuthType: 'oauth2',
+    contentTypes: ['sfx'],
 
     async search(query: string, options: SearchOptions, ctx: ProviderContext): Promise<RawSoundResult[]> {
         if (!ctx.apiKey) {

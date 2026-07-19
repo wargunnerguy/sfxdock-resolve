@@ -41,14 +41,17 @@ export class ProviderRegistry {
         ctxFor: (provider: Provider) => ProviderContext,
     ): Promise<MergedSearchResult> {
         const merged: MergedSearchResult = { results: [], errors: [] };
+        const active = this.all().filter(
+            (p) => !options.contentType || p.contentTypes.includes(options.contentType),
+        );
         const settled = await Promise.allSettled(
-            this.all().map(async (provider) => {
+            active.map(async (provider) => {
                 const ctx = ctxFor(provider);
                 const raw = await provider.search(query, options, ctx);
                 return raw.map<SoundResult>((r) => ({ ...r, badge: deriveBadge(provider, ctx) }));
             }),
         );
-        this.all().forEach((provider, i) => {
+        active.forEach((provider, i) => {
             const outcome = settled[i];
             if (!outcome) return;
             if (outcome.status === 'fulfilled') {

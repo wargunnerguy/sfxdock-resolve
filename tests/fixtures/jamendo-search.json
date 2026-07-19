@@ -1,0 +1,32 @@
+{
+    "headers": {
+        "status": "success",
+        "code": 0,
+        "error_message": "",
+        "results_count": 2
+    },
+    "results": [
+        {
+            "id": 168066,
+            "name": "Morning Drive",
+            "artist_name": "Indie Artist",
+            "duration": 183,
+            "license_ccurl": "http://creativecommons.org/licenses/by-sa/3.0/",
+            "audio": "https://prod-1.storage.jamendo.com/?trackid=168066&format=mp32",
+            "audiodownload": "https://prod-1.storage.jamendo.com/download/track/168066/mp32/",
+            "audiodownload_allowed": true,
+            "waveform": "{\"peaks\":[0,12,25,40,38,52,61,45,30,22,15,8,3]}"
+        },
+        {
+            "id": 250101,
+            "name": "Night Static",
+            "artist_name": "Synth Duo",
+            "duration": 241.5,
+            "license_ccurl": "http://creativecommons.org/licenses/by-nc-nd/3.0/",
+            "audio": "https://prod-1.storage.jamendo.com/?trackid=250101&format=mp32",
+            "audiodownload": "",
+            "audiodownload_allowed": false,
+            "waveform": ""
+        }
+    ]
+}

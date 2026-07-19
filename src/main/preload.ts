@@ -9,7 +9,7 @@ const api: SfxdockApi = {
         ipcRenderer.on(IPC.stateChanged, listener);
         return () => ipcRenderer.removeListener(IPC.stateChanged, listener);
     },
-    search: (query) => ipcRenderer.invoke(IPC.search, query),
+    search: (query, contentType) => ipcRenderer.invoke(IPC.search, query, contentType),
     getKeyStatus: () => ipcRenderer.invoke(IPC.getKeyStatus),
     setProviderKey: (providerId, key) => ipcRenderer.invoke(IPC.setProviderKey, providerId, key),
 };

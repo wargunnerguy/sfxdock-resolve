@@ -14,6 +14,7 @@ function stubProvider(overrides: Partial<Provider> = {}): Provider {
         homepageUrl: 'https://example.com',
         authType: 'none',
         downloadAuthType: 'none',
+        contentTypes: ['sfx'],
         search: async () => [
             {
                 providerId: overrides.id ?? 'stub',
@@ -68,6 +69,12 @@ describe('cc license mapping', () => {
         expect(ccLicenseFromUrl('https://creativecommons.org/licenses/by/4.0/')).toMatchObject({ id: 'CC-BY-4.0' });
         expect(ccLicenseFromUrl('http://creativecommons.org/licenses/by-nc/3.0/')).toMatchObject({ id: 'CC-BY-NC-3.0' });
     });
+    it('maps SA/ND variants without falling into their prefixes', () => {
+        expect(ccLicenseFromUrl('http://creativecommons.org/licenses/by-sa/3.0/')).toMatchObject({ id: 'CC-BY-SA-3.0' });
+        expect(ccLicenseFromUrl('http://creativecommons.org/licenses/by-nc-sa/4.0/')).toMatchObject({ id: 'CC-BY-NC-SA-4.0' });
+        expect(ccLicenseFromUrl('http://creativecommons.org/licenses/by-nc-nd/3.0/')).toMatchObject({ id: 'CC-BY-NC-ND-3.0' });
+        expect(ccLicenseFromUrl('http://creativecommons.org/licenses/by-nd/4.0/')).toMatchObject({ id: 'CC-BY-ND-4.0' });
+    });
     it('returns null for unknown urls', () => {
         expect(ccLicenseFromUrl('https://example.com/eula')).toBeNull();
     });
@@ -89,6 +96,16 @@ describe('registry', () => {
         expect(merged.results.find((r) => r.providerId === 'a')!.badge).toBe('free');
         expect(merged.results.find((r) => r.providerId === 'b')!.badge).toBe('login-required');
         expect(merged.errors).toHaveLength(0);
+    });
+
+    it('filters providers by content type', async () => {
+        const reg = new ProviderRegistry();
+        reg.register(stubProvider({ id: 'sfx-only', contentTypes: ['sfx'] }));
+        reg.register(stubProvider({ id: 'music-only', contentTypes: ['music'] }));
+        const music = await reg.searchAll('x', { contentType: 'music' }, () => baseCtx);
+        expect(music.results.map((r) => r.providerId)).toEqual(['music-only']);
+        const all = await reg.searchAll('x', {}, () => baseCtx);
+        expect(all.results).toHaveLength(2);
     });
 
     it('captures per-provider failures without sinking the search', async () => {

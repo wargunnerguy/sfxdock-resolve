@@ -15,6 +15,7 @@ export interface ConformanceSetup {
 }
 
 const AUTH_TYPES = ['none', 'apiKey', 'oauth2'];
+const CONTENT_TYPES = ['sfx', 'music'];
 
 export function describeProviderConformance(setup: () => ConformanceSetup): void {
     describe('provider contract conformance', () => {
@@ -25,6 +26,8 @@ export function describeProviderConformance(setup: () => ConformanceSetup): void
             expect(() => new URL(provider.homepageUrl)).not.toThrow();
             expect(AUTH_TYPES).toContain(provider.authType);
             expect(AUTH_TYPES).toContain(provider.downloadAuthType);
+            expect(provider.contentTypes.length).toBeGreaterThan(0);
+            for (const ct of provider.contentTypes) expect(CONTENT_TYPES).toContain(ct);
         });
 
         it('search() returns normalized results without badge logic', async () => {
@@ -43,6 +46,9 @@ export function describeProviderConformance(setup: () => ConformanceSetup): void
                 expect(r.previewUrl).toMatch(/^(https?|file):/);
                 if (r.waveform.type === 'provided') {
                     expect(() => new URL(r.waveform.type === 'provided' ? r.waveform.url : '')).not.toThrow();
+                } else if (r.waveform.type === 'peaks') {
+                    expect(r.waveform.peaks.length).toBeGreaterThan(0);
+                    for (const p of r.waveform.peaks) expect(typeof p).toBe('number');
                 } else {
                     expect(r.waveform.type).toBe('render');
                 }

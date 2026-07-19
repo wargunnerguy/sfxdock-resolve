@@ -1,6 +1,6 @@
 // IPC contract between main and renderer. Both sides import from here only.
 
-import type { SoundResult } from '../providers/core/types';
+import type { ContentType, SoundResult } from '../providers/core/types';
 import type { ProviderFailure } from '../providers/core/registry';
 
 export const IPC = {
@@ -34,7 +34,7 @@ export interface SfxdockApi {
     getState(): Promise<ConnectionState>;
     setPinned(pinned: boolean): Promise<boolean>;
     onStateChanged(cb: (state: ConnectionState) => void): () => void;
-    search(query: string): Promise<SearchResponse>;
+    search(query: string, contentType?: ContentType): Promise<SearchResponse>;
     getKeyStatus(): Promise<KeyStatus>;
     setProviderKey(providerId: string, key: string): Promise<KeyStatus>;
 }

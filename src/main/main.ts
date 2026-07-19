@@ -118,7 +118,13 @@ app.whenReady().then(() => {
         win?.setAlwaysOnTop(Boolean(pinned), 'floating');
         return win?.isAlwaysOnTop() ?? false;
     });
-    ipcMain.handle(IPC.search, (_event, query: string) => runSearch(String(query), previewCache));
+    ipcMain.handle(IPC.search, (_event, query: string, contentType?: string) =>
+        runSearch(
+            String(query),
+            contentType === 'sfx' || contentType === 'music' ? contentType : undefined,
+            previewCache,
+        ),
+    );
     ipcMain.handle(IPC.getKeyStatus, () => settings.keyStatus(registry.all().map((p) => p.id)));
     ipcMain.handle(IPC.setProviderKey, (_event, providerId: string, key: string) => {
         settings.setProviderKey(String(providerId), String(key));

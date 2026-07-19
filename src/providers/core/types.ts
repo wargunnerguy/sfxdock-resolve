@@ -8,7 +8,12 @@ export type AuthType = 'none' | 'apiKey' | 'oauth2';
 
 export type Badge = 'free' | 'login-required' | 'paid' | 'owned';
 
-export type Waveform = { type: 'provided'; url: string } | { type: 'render' };
+export type ContentType = 'sfx' | 'music';
+
+export type Waveform =
+    | { type: 'provided'; url: string }
+    | { type: 'peaks'; peaks: number[] }
+    | { type: 'render' };
 
 // What a provider's search() returns. Note: no badge — badges are derived
 // centrally in core/badges.ts; providers never invent badge logic.
@@ -23,6 +28,8 @@ export interface RawSoundResult {
     license: string;
     previewUrl: string;
     waveform: Waveform;
+    /** Provider-private data carried through to getDownload/licenseInfo (e.g. a per-track download URL). */
+    extra?: Record<string, unknown>;
 }
 
 /** A RawSoundResult decorated with the centrally derived badge. */
@@ -33,6 +40,8 @@ export interface SoundResult extends RawSoundResult {
 export interface SearchOptions {
     /** Max results this provider should return (default provider-chosen, ~30). */
     limit?: number;
+    /** Restrict to one content type; undefined = all. The registry skips non-matching providers. */
+    contentType?: ContentType;
 }
 
 /** Everything a provider may use from the outside world — injectable for tests. */
@@ -70,6 +79,8 @@ export interface Provider {
     authType: AuthType;
     /** Auth needed for full-quality download (Freesound: oauth2 > apiKey). */
     downloadAuthType: AuthType;
+    /** What this provider serves; non-empty. Drives the All/SFX/Music filter. */
+    contentTypes: readonly ContentType[];
     search(query: string, options: SearchOptions, ctx: ProviderContext): Promise<RawSoundResult[]>;
     /** null = nothing to download (e.g. local files are already on disk). */
     getDownload(sound: RawSoundResult, ctx: ProviderContext): Promise<DownloadDescriptor | null>;

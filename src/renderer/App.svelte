@@ -1,15 +1,18 @@
 <script lang="ts">
     import type { ConnectionState, KeyStatus, SearchResponse } from '../shared/ipc';
-    import type { SoundResult } from '../providers/core/types';
+    import type { ContentType, SoundResult } from '../providers/core/types';
+    import WaveformPeaks from './WaveformPeaks.svelte';
 
     let conn = $state<ConnectionState>({ connected: false });
     let pinned = $state(false);
     let query = $state('');
+    let contentFilter = $state<'all' | ContentType>('all');
     let searching = $state(false);
     let response = $state<SearchResponse | null>(null);
     let keyStatus = $state<KeyStatus>({});
     let showSettings = $state(false);
     let freesoundKeyInput = $state('');
+    let jamendoKeyInput = $state('');
     let keySaved = $state(false);
     let playingId = $state<string | null>(null);
 
@@ -28,6 +31,8 @@
     });
 
     const hasFreesoundKey = $derived(keyStatus['freesound'] === true);
+    const hasJamendoKey = $derived(keyStatus['jamendo'] === true);
+    const hasAnyKey = $derived(hasFreesoundKey || hasJamendoKey);
 
     async function togglePin() {
         pinned = (await window.sfxdock?.setPinned(!pinned)) ?? pinned;
@@ -38,10 +43,16 @@
         if (!q || !window.sfxdock || searching) return;
         searching = true;
         try {
-            response = await window.sfxdock.search(q);
+            response = await window.sfxdock.search(q, contentFilter === 'all' ? undefined : contentFilter);
         } finally {
             searching = false;
         }
+    }
+
+    function setFilter(f: 'all' | ContentType) {
+        if (contentFilter === f) return;
+        contentFilter = f;
+        if (response) void runSearch();
     }
 
     function keyFor(r: SoundResult): string {
@@ -60,10 +71,11 @@
         playingId = id;
     }
 
-    async function saveFreesoundKey() {
+    async function saveKey(providerId: string, value: string) {
         if (!window.sfxdock) return;
-        keyStatus = await window.sfxdock.setProviderKey('freesound', freesoundKeyInput);
-        freesoundKeyInput = '';
+        keyStatus = await window.sfxdock.setProviderKey(providerId, value);
+        if (providerId === 'freesound') freesoundKeyInput = '';
+        if (providerId === 'jamendo') jamendoKeyInput = '';
         keySaved = true;
         setTimeout(() => (keySaved = false), 2500);
     }
@@ -104,7 +116,7 @@
         <section class="settings">
             <h2>Provider keys</h2>
             <label for="fs-key">
-                Freesound API key
+                Freesound API key <span class="tag">sound effects</span>
                 {#if hasFreesoundKey}<span class="key-ok">set</span>{:else}<span class="key-missing">not set</span>{/if}
             </label>
             <div class="key-row">
@@ -112,14 +124,28 @@
                     id="fs-key"
                     type="password"
                     bind:value={freesoundKeyInput}
-                    placeholder={hasFreesoundKey ? 'Enter new key to replace (empty saves = remove)' : 'Paste your Freesound API key'}
+                    placeholder={hasFreesoundKey ? 'Enter new key to replace (empty = remove)' : 'Paste your Freesound API key'}
                     spellcheck="false"
                 />
-                <button onclick={saveFreesoundKey}>{keySaved ? 'Saved' : 'Save'}</button>
+                <button onclick={() => saveKey('freesound', freesoundKeyInput)}>{keySaved ? 'Saved' : 'Save'}</button>
             </div>
-            <p class="hint">
-                Get a free key at freesound.org/apiv2/apply — it is stored only on this computer.
-            </p>
+            <p class="hint">Get a free key at freesound.org/apiv2/apply</p>
+
+            <label for="jm-key" class="second-key">
+                Jamendo client ID <span class="tag">music</span>
+                {#if hasJamendoKey}<span class="key-ok">set</span>{:else}<span class="key-missing">not set</span>{/if}
+            </label>
+            <div class="key-row">
+                <input
+                    id="jm-key"
+                    type="password"
+                    bind:value={jamendoKeyInput}
+                    placeholder={hasJamendoKey ? 'Enter new client ID to replace (empty = remove)' : 'Paste your Jamendo client ID'}
+                    spellcheck="false"
+                />
+                <button onclick={() => saveKey('jamendo', jamendoKeyInput)}>{keySaved ? 'Saved' : 'Save'}</button>
+            </div>
+            <p class="hint">Get a free client ID at devportal.jamendo.com — keys are stored only on this computer.</p>
         </section>
     {/if}
 
@@ -129,15 +155,20 @@
                 type="text"
                 bind:value={query}
                 onkeydown={(e) => e.key === 'Enter' && runSearch()}
-                placeholder="Search sound effects…"
+                placeholder="Search sounds and music…"
                 spellcheck="false"
             />
             <button onclick={runSearch} disabled={searching || query.trim() === ''}>
                 {searching ? '…' : 'Search'}
             </button>
         </div>
-        {#if !hasFreesoundKey && !showSettings}
-            <p class="hint">No Freesound API key set — open Settings to add one.</p>
+        <div class="filter-row">
+            <button class="chip" class:active={contentFilter === 'all'} onclick={() => setFilter('all')}>All</button>
+            <button class="chip" class:active={contentFilter === 'sfx'} onclick={() => setFilter('sfx')}>SFX</button>
+            <button class="chip" class:active={contentFilter === 'music'} onclick={() => setFilter('music')}>Music</button>
+        </div>
+        {#if !hasAnyKey && !showSettings}
+            <p class="hint">No provider keys set — open Settings to add a Freesound key (SFX) or Jamendo client ID (music).</p>
         {/if}
     </section>
 
@@ -164,11 +195,13 @@
                                 <span
                                     class="badge badge-{r.badge}"
                                     title={r.badge === 'login-required'
-                                        ? 'Previews play free — the badge means full-quality download needs a Freesound login (coming with OAuth in a later phase)'
+                                        ? 'Previews play free — the badge means full-quality download needs a login (OAuth arrives in a later phase)'
                                         : undefined}>{BADGE_LABEL[r.badge] ?? r.badge}</span>
                             </div>
                             {#if r.waveform.type === 'provided'}
                                 <img class="waveform" src={r.waveform.url} alt="" draggable="false" />
+                            {:else if r.waveform.type === 'peaks'}
+                                <WaveformPeaks peaks={r.waveform.peaks} />
                             {:else}
                                 <div class="waveform placeholder"></div>
                             {/if}
@@ -196,7 +229,7 @@
         {#if conn.connected && response}
             {conn.projectName ?? ''} · SFXDock 0.1.0
         {:else}
-            SFXDock 0.1.0 — Phase 2
+            SFXDock 0.1.0 — Phase 3
         {/if}
     </footer>
 </main>
@@ -294,6 +327,31 @@
     }
     .search-row input {
         flex: 1;
+    }
+    .filter-row {
+        display: flex;
+        gap: 6px;
+        margin-top: 8px;
+    }
+    .chip {
+        padding: 3px 14px;
+        border-radius: 12px;
+        font-size: 11px;
+        background: #222;
+        border: 1px solid #3c3c3c;
+    }
+    .chip.active {
+        background: #33465f;
+        color: #fff;
+        border-color: #5a7aa5;
+    }
+    .second-key {
+        margin-top: 12px;
+    }
+    .tag {
+        font-size: 10px;
+        color: #7a8aa0;
+        margin-left: 4px;
     }
     .hint {
         color: #888;
