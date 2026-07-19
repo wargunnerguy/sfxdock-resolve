@@ -37,9 +37,29 @@
     let followResolve = $state(false);
     let searchInput = $state<HTMLInputElement | undefined>();
 
+    let playProgress = $state(0); // 0..1 position of the currently playing sound
+
     const audio = new Audio();
-    audio.addEventListener('ended', () => (playingId = null));
-    audio.addEventListener('error', () => (playingId = null));
+    let rafId = 0;
+    function stopTick() {
+        if (rafId) cancelAnimationFrame(rafId);
+        rafId = 0;
+    }
+    function tick() {
+        if (playingId && audio.duration > 0) {
+            playProgress = audio.currentTime / audio.duration;
+            rafId = requestAnimationFrame(tick);
+        }
+    }
+    audio.addEventListener('ended', () => {
+        playingId = null;
+        playProgress = 0;
+        stopTick();
+    });
+    audio.addEventListener('error', () => {
+        playingId = null;
+        stopTick();
+    });
 
     $effect(() => {
         if (!window.sfxdock) {
@@ -63,10 +83,10 @@
 
     const hasResults = $derived(!!response && response.results.length > 0);
 
-    // In compact mode the window auto-fits: just the search bar, or taller when results show.
+    // In compact mode the window auto-fits: just the search bar + filter, or taller when results show.
     $effect(() => {
         if (!window.sfxdock || !compact) return;
-        window.sfxdock.setWindowSize(380, hasResults ? 470 : 84);
+        window.sfxdock.setWindowSize(380, hasResults ? 480 : 100);
     });
 
     async function toggleCompact() {
@@ -222,11 +242,31 @@
         if (playingId === id) {
             audio.pause();
             playingId = null;
+            stopTick();
             return;
         }
         audio.src = `sfx-preview://${r.providerId}/${r.soundId}`;
+        playProgress = 0;
         void audio.play().catch(() => (playingId = null));
         playingId = id;
+        stopTick();
+        rafId = requestAnimationFrame(tick);
+    }
+
+    // Click a waveform to seek within the currently playing sound.
+    function seek(r: SoundResult, e: MouseEvent) {
+        if (playingId !== keyFor(r) || !audio.duration) return;
+        const el = e.currentTarget as HTMLElement;
+        const rect = el.getBoundingClientRect();
+        const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+        audio.currentTime = ratio * audio.duration;
+        playProgress = ratio;
+    }
+
+    function clearResults() {
+        response = null;
+        query = '';
+        searchInput?.focus();
     }
 
     async function saveKey(providerId: string, value: string) {
@@ -265,20 +305,27 @@
         <header>
             <h1>SFXDock</h1>
             <div class="header-buttons">
-                <button class="icon-btn" onclick={toggleCompact} title="Compact floating bar">Compact</button>
+                <button class="icon-btn" onclick={toggleCompact} title="Mini floating bar">Mini</button>
                 <button
-                    class="icon-btn"
+                    class="icon-btn glyph"
                     class:active={showSettings}
                     onclick={() => (showSettings = !showSettings)}
                     title="Settings"
+                    aria-label="Settings"
                 >
-                    Settings
+                    ⚙
                 </button>
-                <button class="icon-btn" class:active={pinned} onclick={togglePin} title="Keep window on top">
-                    {pinned ? 'Pinned' : 'Pin'}
+                <button
+                    class="icon-btn glyph"
+                    class:active={pinned}
+                    onclick={togglePin}
+                    title={pinned ? 'Pinned on top' : 'Keep window on top'}
+                    aria-label="Pin window on top"
+                >
+                    📌
                 </button>
-                <button class="win-btn" onclick={() => window.sfxdock?.minimizeWindow()} title="Minimize">–</button>
-                <button class="win-btn close" onclick={() => window.sfxdock?.closeWindow()} title="Close">×</button>
+                <button class="win-btn" onclick={() => window.sfxdock?.minimizeWindow()} title="Minimize" aria-label="Minimize">–</button>
+                <button class="win-btn close" onclick={() => window.sfxdock?.closeWindow()} title="Close" aria-label="Close">×</button>
             </div>
         </header>
     {/if}
@@ -368,24 +415,32 @@
                 bind:this={searchInput}
                 type="text"
                 bind:value={query}
-                onkeydown={(e) => e.key === 'Enter' && runSearch()}
+                onkeydown={(e) => {
+                    if (e.key === 'Enter') runSearch();
+                    else if (e.key === 'Escape') clearResults();
+                }}
                 placeholder="Search sounds and music…"
                 spellcheck="false"
             />
-            {#if !compact}
-                <button onclick={runSearch} disabled={searching || query.trim() === ''}>
-                    {searching ? '…' : 'Search'}
-                </button>
+            {#if query || hasResults}
+                <button class="icon-btn glyph" onclick={clearResults} title="Clear (Esc)" aria-label="Clear">×</button>
             {/if}
+            <button
+                class="icon-btn glyph"
+                onclick={runSearch}
+                disabled={searching || query.trim() === ''}
+                title="Search"
+                aria-label="Search"
+            >
+                {searching ? '…' : '🔍'}
+            </button>
         </div>
-        {#if !compact}
-            <div class="filter-row">
-                <button class="chip" class:active={contentFilter === 'all'} onclick={() => setFilter('all')}>All</button>
-                <button class="chip" class:active={contentFilter === 'sfx'} onclick={() => setFilter('sfx')}>SFX</button>
-                <button class="chip" class:active={contentFilter === 'music'} onclick={() => setFilter('music')}>Music</button>
-            </div>
-        {/if}
-        {#if !hasAnyKey && !showSettings}
+        <div class="filter-row">
+            <button class="chip" class:active={contentFilter === 'all'} onclick={() => setFilter('all')}>All</button>
+            <button class="chip" class:active={contentFilter === 'sfx'} onclick={() => setFilter('sfx')}>SFX</button>
+            <button class="chip" class:active={contentFilter === 'music'} onclick={() => setFilter('music')}>Music</button>
+        </div>
+        {#if !hasAnyKey && !showSettings && !compact}
             <p class="hint">No provider keys set — open Settings to add a Freesound key (SFX) or Jamendo client ID (music).</p>
         {/if}
     </section>
@@ -425,13 +480,26 @@
                                         ? 'Previews play free — the badge means full-quality download needs a login (OAuth arrives in a later phase)'
                                         : undefined}>{BADGE_LABEL[r.badge] ?? r.badge}</span>
                             </div>
-                            {#if r.waveform.type === 'provided'}
-                                <img class="waveform" src={r.waveform.url} alt="" draggable="false" />
-                            {:else if r.waveform.type === 'peaks'}
-                                <WaveformPeaks peaks={r.waveform.peaks} />
-                            {:else}
-                                <RenderedWaveform providerId={r.providerId} soundId={r.soundId} />
-                            {/if}
+                            <!-- svelte-ignore a11y_no_static_element_interactions -->
+                            <!-- svelte-ignore a11y_click_events_have_key_events -->
+                            <div
+                                class="waveform-wrap"
+                                onclick={(e) => seek(r, e)}
+                                ondragstart={(e) => e.preventDefault()}
+                                draggable="false"
+                            >
+                                {#if r.waveform.type === 'provided'}
+                                    <img class="waveform" src={r.waveform.url} alt="" draggable="false" />
+                                {:else if r.waveform.type === 'peaks'}
+                                    <WaveformPeaks peaks={r.waveform.peaks} />
+                                {:else}
+                                    <RenderedWaveform providerId={r.providerId} soundId={r.soundId} />
+                                {/if}
+                                {#if playingId === keyFor(r)}
+                                    <div class="wave-played" style="width: {playProgress * 100}%"></div>
+                                    <div class="wave-playhead" style="left: {playProgress * 100}%"></div>
+                                {/if}
+                            </div>
                             <div class="result-meta">
                                 <span>
                                     {formatDuration(r.durationSec)}
@@ -512,11 +580,23 @@
         box-sizing: border-box;
     }
     main.compact {
-        gap: 6px;
-        padding: 6px 8px 8px;
+        gap: 4px;
+        padding: 4px 6px 6px;
+    }
+    main.compact .search {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
     }
     main.compact .search input {
         font-size: 14px;
+        padding: 6px 9px;
+    }
+    main.compact .filter-row {
+        margin-top: 0;
+    }
+    main.compact .chip {
+        padding: 2px 10px;
     }
 
     /* Frameless chrome: the header/handle are OS drag regions; interactive
@@ -756,17 +836,43 @@
         color: #8fb2cf;
         border-color: #4f637f;
     }
+    .waveform-wrap {
+        position: relative;
+        margin: 5px 0 3px;
+        cursor: pointer;
+    }
     .waveform {
         display: block;
         width: 100%;
         height: 34px;
         object-fit: fill;
-        margin: 5px 0 3px;
         border-radius: 3px;
         background: #1b1b1b;
     }
     .waveform.placeholder {
         opacity: 0.4;
+    }
+    .wave-played {
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 34px;
+        background: rgba(130, 170, 230, 0.22);
+        border-radius: 3px 0 0 3px;
+        pointer-events: none;
+    }
+    .wave-playhead {
+        position: absolute;
+        top: 0;
+        height: 34px;
+        width: 2px;
+        background: #9fc0ff;
+        pointer-events: none;
+    }
+    .icon-btn.glyph {
+        padding: 5px 9px;
+        font-size: 13px;
+        line-height: 1;
     }
     .result-meta {
         font-size: 11px;

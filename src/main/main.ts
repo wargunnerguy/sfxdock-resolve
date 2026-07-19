@@ -115,9 +115,9 @@ function createWindow(): void {
     });
     // Compact preference persists across launches; apply frame-independent state early.
     if (settings.getCompact()) {
-        win.setMinimumSize(300, 70);
+        win.setMinimumSize(300, 90);
         win.setAlwaysOnTop(true, 'floating');
-        win.setSize(380, 84);
+        win.setSize(380, 100);
     }
     win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
     win.on('closed', () => {
@@ -240,7 +240,7 @@ app.whenReady().then(() => {
         settings.setCompact(Boolean(compact));
         if (!win) return;
         if (compact) {
-            win.setMinimumSize(300, 70);
+            win.setMinimumSize(300, 90);
             win.setAlwaysOnTop(true, 'floating');
         } else {
             win.setMinimumSize(360, 480);

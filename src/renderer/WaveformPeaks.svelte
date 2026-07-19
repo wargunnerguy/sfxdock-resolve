@@ -26,7 +26,6 @@
         display: block;
         width: 100%;
         height: 34px;
-        margin: 5px 0 3px;
         border-radius: 3px;
         background: #1b1b1b;
     }
