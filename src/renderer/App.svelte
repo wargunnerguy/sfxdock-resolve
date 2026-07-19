@@ -1,9 +1,21 @@
-﻿<script lang="ts">
-    import type { ConnectionState } from '../shared/ipc';
+<script lang="ts">
+    import type { ConnectionState, KeyStatus, SearchResponse } from '../shared/ipc';
+    import type { SoundResult } from '../providers/core/types';
 
     let conn = $state<ConnectionState>({ connected: false });
     let pinned = $state(false);
-    let search = $state('');
+    let query = $state('');
+    let searching = $state(false);
+    let response = $state<SearchResponse | null>(null);
+    let keyStatus = $state<KeyStatus>({});
+    let showSettings = $state(false);
+    let freesoundKeyInput = $state('');
+    let keySaved = $state(false);
+    let playingId = $state<string | null>(null);
+
+    const audio = new Audio();
+    audio.addEventListener('ended', () => (playingId = null));
+    audio.addEventListener('error', () => (playingId = null));
 
     $effect(() => {
         if (!window.sfxdock) {
@@ -11,60 +23,177 @@
             return;
         }
         window.sfxdock.getState().then((s) => (conn = s));
+        window.sfxdock.getKeyStatus().then((s) => (keyStatus = s));
         return window.sfxdock.onStateChanged((s) => (conn = s));
     });
+
+    const hasFreesoundKey = $derived(keyStatus['freesound'] === true);
 
     async function togglePin() {
         pinned = (await window.sfxdock?.setPinned(!pinned)) ?? pinned;
     }
+
+    async function runSearch() {
+        const q = query.trim();
+        if (!q || !window.sfxdock || searching) return;
+        searching = true;
+        try {
+            response = await window.sfxdock.search(q);
+        } finally {
+            searching = false;
+        }
+    }
+
+    function keyFor(r: SoundResult): string {
+        return `${r.providerId}/${r.soundId}`;
+    }
+
+    function togglePlay(r: SoundResult) {
+        const id = keyFor(r);
+        if (playingId === id) {
+            audio.pause();
+            playingId = null;
+            return;
+        }
+        audio.src = `sfx-preview://${r.providerId}/${r.soundId}`;
+        void audio.play().catch(() => (playingId = null));
+        playingId = id;
+    }
+
+    async function saveFreesoundKey() {
+        if (!window.sfxdock) return;
+        keyStatus = await window.sfxdock.setProviderKey('freesound', freesoundKeyInput);
+        freesoundKeyInput = '';
+        keySaved = true;
+        setTimeout(() => (keySaved = false), 2500);
+    }
+
+    function formatDuration(sec: number): string {
+        const m = Math.floor(sec / 60);
+        const s = Math.round(sec % 60);
+        return `${m}:${String(s).padStart(2, '0')}`;
+    }
+
+    const BADGE_LABEL: Record<string, string> = {
+        free: 'Free',
+        'login-required': 'Login required',
+        paid: 'Paid',
+        owned: 'Owned',
+    };
 </script>
 
 <main>
     <header>
         <h1>SFXDock</h1>
-        <button class="pin" class:active={pinned} onclick={togglePin} title="Keep window on top">
-            {pinned ? 'Pinned' : 'Pin'}
-        </button>
+        <div class="header-buttons">
+            <button
+                class="icon-btn"
+                class:active={showSettings}
+                onclick={() => (showSettings = !showSettings)}
+                title="Settings"
+            >
+                Settings
+            </button>
+            <button class="icon-btn" class:active={pinned} onclick={togglePin} title="Keep window on top">
+                {pinned ? 'Pinned' : 'Pin'}
+            </button>
+        </div>
     </header>
 
-    <section class="status" class:ok={conn.connected}>
-        {#if conn.connected}
-            <div class="row">
-                <span class="dot ok-dot"></span>
-                Connected to {conn.productName} {conn.resolveVersion}
+    {#if showSettings}
+        <section class="settings">
+            <h2>Provider keys</h2>
+            <label for="fs-key">
+                Freesound API key
+                {#if hasFreesoundKey}<span class="key-ok">set</span>{:else}<span class="key-missing">not set</span>{/if}
+            </label>
+            <div class="key-row">
+                <input
+                    id="fs-key"
+                    type="password"
+                    bind:value={freesoundKeyInput}
+                    placeholder={hasFreesoundKey ? 'Enter new key to replace (empty saves = remove)' : 'Paste your Freesound API key'}
+                    spellcheck="false"
+                />
+                <button onclick={saveFreesoundKey}>{keySaved ? 'Saved' : 'Save'}</button>
             </div>
-            <div class="project">
-                Project: <strong>{conn.projectName ?? '(none open)'}</strong>
-            </div>
-        {:else}
-            <div class="row">
-                <span class="dot err-dot"></span>
-                Not connected to Resolve
-            </div>
-            {#if conn.error}
-                <div class="error">{conn.error}</div>
-            {/if}
+            <p class="hint">
+                Get a free key at freesound.org/apiv2/apply — it is stored only on this computer.
+            </p>
+        </section>
+    {/if}
+
+    <section class="search">
+        <div class="search-row">
+            <input
+                type="text"
+                bind:value={query}
+                onkeydown={(e) => e.key === 'Enter' && runSearch()}
+                placeholder="Search sound effects…"
+                spellcheck="false"
+            />
+            <button onclick={runSearch} disabled={searching || query.trim() === ''}>
+                {searching ? '…' : 'Search'}
+            </button>
+        </div>
+        {#if !hasFreesoundKey && !showSettings}
+            <p class="hint">No Freesound API key set — open Settings to add one.</p>
         {/if}
     </section>
 
-    <section class="search">
-        <input
-            type="text"
-            bind:value={search}
-            placeholder="Search sound effects — coming in Phase 2…"
-            spellcheck="false"
-        />
-        <p class="hint">
-            {#if search.length > 0}
-                Keyboard input OK — {search.length} character{search.length === 1 ? '' : 's'} received.
+    {#if response}
+        {#each response.errors as err (err.providerId)}
+            <div class="error-banner">
+                <strong>{err.providerId}</strong>: {err.message}
+                {#if err.kind === 'auth'}— check the key in Settings.{/if}
+            </div>
+        {/each}
+
+        <section class="results">
+            {#if response.results.length === 0 && response.errors.length === 0}
+                <p class="hint">No results.</p>
             {:else}
-                Type here to verify keyboard input reaches the panel.
+                {#each response.results as r (keyFor(r))}
+                    <div class="result" class:playing={playingId === keyFor(r)}>
+                        <button class="play" onclick={() => togglePlay(r)} title="Preview">
+                            {playingId === keyFor(r) ? '⏸' : '▶'}
+                        </button>
+                        <div class="result-body">
+                            <div class="result-top">
+                                <span class="title" title={r.title}>{r.title}</span>
+                                <span class="badge badge-{r.badge}">{BADGE_LABEL[r.badge] ?? r.badge}</span>
+                            </div>
+                            {#if r.waveform.type === 'provided'}
+                                <img class="waveform" src={r.waveform.url} alt="" draggable="false" />
+                            {:else}
+                                <div class="waveform placeholder"></div>
+                            {/if}
+                            <div class="result-meta">
+                                {formatDuration(r.durationSec)}
+                                {#if r.author}· {r.author}{/if}
+                                · {r.providerId}
+                            </div>
+                        </div>
+                    </div>
+                {/each}
             {/if}
-        </p>
-    </section>
+        </section>
+    {:else}
+        <section class="status" class:ok={conn.connected}>
+            {#if conn.connected}
+                <span class="dot ok-dot"></span> {conn.productName} · {conn.projectName ?? '(no project)'}
+            {:else}
+                <span class="dot err-dot"></span> Not connected to Resolve{conn.error ? ` — ${conn.error}` : ''}
+            {/if}
+        </section>
+    {/if}
 
     <footer>
-        SFXDock 0.1.0 — Phase 1 skeleton
+        {#if conn.connected && response}
+            {conn.projectName ?? ''} · SFXDock 0.1.0
+        {:else}
+            SFXDock 0.1.0 — Phase 2
+        {/if}
     </footer>
 </main>
 
@@ -72,9 +201,9 @@
     main {
         display: flex;
         flex-direction: column;
-        gap: 14px;
+        gap: 10px;
         height: 100vh;
-        padding: 14px;
+        padding: 12px;
         box-sizing: border-box;
     }
     header {
@@ -83,41 +212,197 @@
         justify-content: space-between;
     }
     h1 {
-        font-size: 18px;
+        font-size: 17px;
         margin: 0;
         letter-spacing: 0.5px;
     }
-    .pin {
+    h2 {
+        font-size: 13px;
+        margin: 0 0 8px;
+        color: #bbb;
+    }
+    .header-buttons {
+        display: flex;
+        gap: 6px;
+    }
+    .icon-btn,
+    button {
         background: #2a2a2a;
         color: #ccc;
         border: 1px solid #444;
         border-radius: 4px;
-        padding: 4px 12px;
+        padding: 5px 12px;
         cursor: pointer;
+        font-size: 12px;
     }
-    .pin.active {
+    button:disabled {
+        opacity: 0.5;
+        cursor: default;
+    }
+    .icon-btn.active {
         background: #3a5f3a;
         color: #fff;
         border-color: #5a8f5a;
+    }
+    .settings {
+        background: #262626;
+        border: 1px solid #3c3c3c;
+        border-radius: 6px;
+        padding: 10px 12px;
+    }
+    .settings label {
+        font-size: 12px;
+        color: #bbb;
+        display: block;
+        margin-bottom: 4px;
+    }
+    .key-ok {
+        color: #5fbf5f;
+        margin-left: 6px;
+    }
+    .key-missing {
+        color: #bf8f5f;
+        margin-left: 6px;
+    }
+    .key-row {
+        display: flex;
+        gap: 6px;
+    }
+    .key-row input {
+        flex: 1;
+    }
+    input {
+        background: #1b1b1b;
+        color: #eee;
+        border: 1px solid #444;
+        border-radius: 5px;
+        padding: 7px 10px;
+        font-size: 13px;
+        box-sizing: border-box;
+    }
+    input:focus {
+        outline: none;
+        border-color: #6a9fd8;
+    }
+    .search-row {
+        display: flex;
+        gap: 6px;
+    }
+    .search-row input {
+        flex: 1;
+    }
+    .hint {
+        color: #888;
+        font-size: 11px;
+        margin: 6px 2px 0;
+    }
+    .error-banner {
+        background: #3a2626;
+        border: 1px solid #6f3c3c;
+        border-radius: 6px;
+        padding: 8px 10px;
+        font-size: 12px;
+        color: #dfa9a9;
+    }
+    .results {
+        flex: 1;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-height: 0;
+    }
+    .result {
+        display: flex;
+        gap: 8px;
+        background: #262626;
+        border: 1px solid #3c3c3c;
+        border-radius: 6px;
+        padding: 8px;
+        align-items: center;
+    }
+    .result.playing {
+        border-color: #6a9fd8;
+    }
+    .play {
+        flex: none;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        padding: 0;
+        font-size: 13px;
+    }
+    .result-body {
+        flex: 1;
+        min-width: 0;
+    }
+    .result-top {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .title {
+        flex: 1;
+        font-size: 13px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .badge {
+        flex: none;
+        font-size: 10px;
+        padding: 2px 7px;
+        border-radius: 9px;
+        border: 1px solid;
+    }
+    .badge-free {
+        color: #7fcf7f;
+        border-color: #4f7f4f;
+    }
+    .badge-login-required {
+        color: #cfb27f;
+        border-color: #7f6f4f;
+    }
+    .badge-paid {
+        color: #cf8f8f;
+        border-color: #7f4f4f;
+    }
+    .badge-owned {
+        color: #8fb2cf;
+        border-color: #4f637f;
+    }
+    .waveform {
+        display: block;
+        width: 100%;
+        height: 34px;
+        object-fit: fill;
+        margin: 5px 0 3px;
+        border-radius: 3px;
+        background: #1b1b1b;
+    }
+    .waveform.placeholder {
+        opacity: 0.4;
+    }
+    .result-meta {
+        font-size: 11px;
+        color: #888;
     }
     .status {
         background: #262626;
         border: 1px solid #3c3c3c;
         border-radius: 6px;
-        padding: 10px 12px;
-        font-size: 13px;
-    }
-    .status.ok {
-        border-color: #3a5f3a;
-    }
-    .row {
+        padding: 9px 12px;
+        font-size: 12px;
         display: flex;
         align-items: center;
         gap: 8px;
     }
+    .status.ok {
+        border-color: #3a5f3a;
+    }
     .dot {
-        width: 9px;
-        height: 9px;
+        width: 8px;
+        height: 8px;
         border-radius: 50%;
         flex: none;
     }
@@ -127,38 +412,10 @@
     .err-dot {
         background: #bf5f5f;
     }
-    .project {
-        margin-top: 6px;
-        color: #bbb;
-    }
-    .error {
-        margin-top: 6px;
-        color: #cf8f8f;
-        font-size: 12px;
-    }
-    .search input {
-        width: 100%;
-        box-sizing: border-box;
-        background: #1b1b1b;
-        color: #eee;
-        border: 1px solid #444;
-        border-radius: 6px;
-        padding: 9px 12px;
-        font-size: 14px;
-    }
-    .search input:focus {
-        outline: none;
-        border-color: #6a9fd8;
-    }
-    .hint {
-        color: #888;
-        font-size: 12px;
-        margin: 6px 2px 0;
-    }
     footer {
         margin-top: auto;
         color: #666;
-        font-size: 11px;
+        font-size: 10px;
         text-align: center;
     }
 </style>

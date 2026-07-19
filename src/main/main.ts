@@ -1,7 +1,17 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, protocol } from 'electron';
 import path from 'node:path';
 import { IPC, type ConnectionState } from '../shared/ipc';
 import { ResolveBridge } from '../resolve/bridge';
+import { PreviewCache } from './preview-cache';
+import { registry, runSearch } from './search';
+import { settings } from './settings';
+
+// Must run before app ready: the preview protocol needs stream privileges.
+protocol.registerSchemesAsPrivileged([
+    { scheme: 'sfx-preview', privileges: { secure: true, stream: true } },
+]);
+
+const previewCache = new PreviewCache();
 
 const PLUGIN_ID = 'com.costlio.sfxdock';
 const POLL_MS = 2000;
@@ -83,11 +93,29 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+    settings.load();
+    previewCache.init();
+
+    // sfx-preview://<providerId>/<soundId> → cached or proxied preview stream.
+    protocol.handle('sfx-preview', (request) => {
+        const url = new URL(request.url);
+        const providerId = url.host;
+        const soundId = decodeURIComponent(url.pathname.replace(/^\//, ''));
+        return previewCache.handleRequest(providerId, soundId);
+    });
+
     ipcMain.handle(IPC.getState, () => current);
     ipcMain.handle(IPC.setPinned, (_event, pinned: boolean) => {
         win?.setAlwaysOnTop(Boolean(pinned), 'floating');
         return win?.isAlwaysOnTop() ?? false;
     });
+    ipcMain.handle(IPC.search, (_event, query: string) => runSearch(String(query), previewCache));
+    ipcMain.handle(IPC.getKeyStatus, () => settings.keyStatus(registry.all().map((p) => p.id)));
+    ipcMain.handle(IPC.setProviderKey, (_event, providerId: string, key: string) => {
+        settings.setProviderKey(String(providerId), String(key));
+        return settings.keyStatus(registry.all().map((p) => p.id));
+    });
+
     createWindow();
     void refreshState();
     pollTimer = setInterval(() => void refreshState(), POLL_MS);
