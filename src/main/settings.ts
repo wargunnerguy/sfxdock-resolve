@@ -9,9 +9,11 @@ import path from 'node:path';
 
 interface SettingsShape {
     providerKeys: Record<string, string>;
+    binName: string;
 }
 
-const DEFAULTS: SettingsShape = { providerKeys: {} };
+const DEFAULT_BIN = 'SFX';
+const DEFAULTS: SettingsShape = { providerKeys: {}, binName: DEFAULT_BIN };
 
 class Settings {
     private file = path.join(app.getPath('userData'), 'sfxdock-settings.json');
@@ -24,6 +26,15 @@ class Settings {
         } catch {
             this.data = { ...DEFAULTS, providerKeys: {} };
         }
+    }
+
+    getBinName(): string {
+        return this.data.binName || DEFAULT_BIN;
+    }
+
+    setBinName(name: string): void {
+        this.data.binName = name.trim() || DEFAULT_BIN;
+        this.save();
     }
 
     private save(): void {

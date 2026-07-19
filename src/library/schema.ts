@@ -1,7 +1,7 @@
 // Schema + migrations for the SQLite library index. Bump SCHEMA_VERSION and
 // add a migration step when the shape changes.
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const MIGRATIONS: string[] = [
     // v1
@@ -47,5 +47,15 @@ export const MIGRATIONS: string[] = [
         format TEXT NOT NULL DEFAULT ''
     );
     CREATE INDEX idx_local_files_folder ON local_files (folder_id);
+    `,
+    // v2 — which downloaded sounds were imported into which Resolve project,
+    // for per-project attribution export (project identified by GetUniqueId).
+    `
+    CREATE TABLE imports (
+        project_id TEXT NOT NULL,
+        download_id INTEGER NOT NULL REFERENCES downloads(id) ON DELETE CASCADE,
+        imported_at INTEGER NOT NULL,
+        PRIMARY KEY (project_id, download_id)
+    );
     `,
 ];

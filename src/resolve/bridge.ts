@@ -3,8 +3,10 @@
 // must keep working when Resolve is absent (connect() simply fails).
 
 import type {
+    ImportResult,
     ProjectSnapshot,
     ResolveApp,
+    ResolveFolder,
     WorkflowIntegrationModule,
 } from './types';
 
@@ -71,6 +73,39 @@ export class ResolveBridge {
         } catch (e) {
             this.lastError = e instanceof Error ? e.message : String(e);
             return null;
+        }
+    }
+
+    // Imports a file into a Media Pool bin (created if missing — bins can't be
+    // renamed via API, so the configured name is matched/created, not renamed).
+    // Uses exactly the calls the Phase 0 probe verified.
+    async importToBin(filePath: string, binName: string): Promise<ImportResult> {
+        if (!this.resolveApp) return { ok: false, binName, error: 'Not connected to Resolve' };
+        try {
+            const pm = await this.resolveApp.GetProjectManager();
+            const project = pm ? await pm.GetCurrentProject() : null;
+            const mediaPool = project ? await project.GetMediaPool() : null;
+            const root = mediaPool ? await mediaPool.GetRootFolder() : null;
+            if (!mediaPool || !root) return { ok: false, binName, error: 'No open project / media pool' };
+
+            let bin: ResolveFolder | null = null;
+            for (const sub of await root.GetSubFolderList()) {
+                if ((await sub.GetName()) === binName) {
+                    bin = sub;
+                    break;
+                }
+            }
+            bin ??= await mediaPool.AddSubFolder(root, binName);
+            if (!bin) return { ok: false, binName, error: `Could not create bin "${binName}"` };
+
+            await mediaPool.SetCurrentFolder(bin);
+            const items = await mediaPool.ImportMedia([filePath]);
+            if (!items || items.length === 0) {
+                return { ok: false, binName, error: 'Resolve did not import the file' };
+            }
+            return { ok: true, binName, clipName: await items[0]!.GetName() };
+        } catch (e) {
+            return { ok: false, binName, error: e instanceof Error ? e.message : String(e) };
         }
     }
 

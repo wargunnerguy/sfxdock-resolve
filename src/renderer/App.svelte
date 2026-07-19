@@ -1,5 +1,12 @@
 <script lang="ts">
-    import type { ConnectionState, FoldersView, KeyStatus, SearchResponse, DownloadOutcome } from '../shared/ipc';
+    import type {
+        ConnectionState,
+        FoldersView,
+        KeyStatus,
+        SearchResponse,
+        DownloadOutcome,
+        ImportOutcome,
+    } from '../shared/ipc';
     import type { ContentType, SoundResult } from '../providers/core/types';
     import WaveformPeaks from './WaveformPeaks.svelte';
     import RenderedWaveform from './RenderedWaveform.svelte';
@@ -21,6 +28,11 @@
     let rescanMsg = $state('');
     // per-result transient status: 'downloading' | 'owned' | 'copied' | error text
     let itemStatus = $state<Record<string, string>>({});
+    // per-result import status: 'importing' | 'imported' | error text
+    let importStatus = $state<Record<string, string>>({});
+    let binName = $state('SFX');
+    let binNameInput = $state('');
+    let exportMsg = $state('');
 
     const audio = new Audio();
     audio.addEventListener('ended', () => (playingId = null));
@@ -34,6 +46,10 @@
         window.sfxdock.getState().then((s) => (conn = s));
         window.sfxdock.getKeyStatus().then((s) => (keyStatus = s));
         window.sfxdock.listWatchedFolders().then((f) => (folders = f));
+        window.sfxdock.getBinName().then((n) => {
+            binName = n;
+            binNameInput = n;
+        });
         return window.sfxdock.onStateChanged((s) => (conn = s));
     });
 
@@ -91,6 +107,56 @@
         } catch {
             itemStatus = { ...itemStatus, [keyFor(r)]: 'copy failed' };
         }
+    }
+
+    async function importResult(r: SoundResult) {
+        if (!window.sfxdock) return;
+        const id = keyFor(r);
+        importStatus = { ...importStatus, [id]: 'importing' };
+        let outcome: ImportOutcome;
+        try {
+            outcome = await window.sfxdock.importToResolve($state.snapshot(r), lastQuery);
+        } catch (e) {
+            outcome = { status: 'error', message: e instanceof Error ? e.message : String(e) };
+        }
+        if (outcome.status === 'ok') {
+            importStatus = { ...importStatus, [id]: `in ${outcome.binName}` };
+            if (r.providerId !== 'local') r.badge = 'owned';
+        } else if (outcome.status === 'login-required') {
+            importStatus = { ...importStatus, [id]: 'login needed' };
+        } else {
+            importStatus = { ...importStatus, [id]: outcome.message };
+        }
+    }
+
+    function onDragStart(r: SoundResult, e: DragEvent) {
+        const p = r.extra?.['localPath'] as string | undefined;
+        if (!p) return;
+        e.preventDefault();
+        window.sfxdock?.startDrag(p);
+    }
+
+    async function saveBinName() {
+        if (!window.sfxdock) return;
+        binName = await window.sfxdock.setBinName(binNameInput);
+        binNameInput = binName;
+        keySaved = true;
+        setTimeout(() => (keySaved = false), 2000);
+    }
+
+    async function exportAttributions() {
+        if (!window.sfxdock) return;
+        exportMsg = 'Exporting…';
+        const res = await window.sfxdock.exportAttributions();
+        exportMsg =
+            res.status === 'ok'
+                ? `Exported ${res.count} sound${res.count === 1 ? '' : 's'}.`
+                : res.status === 'empty'
+                  ? 'No SFXDock sounds imported into this project yet.'
+                  : res.status === 'cancelled'
+                    ? ''
+                    : `Export failed: ${res.message}`;
+        setTimeout(() => (exportMsg = ''), 5000);
     }
 
     async function addFolder() {
@@ -226,6 +292,18 @@
                 {#if rescanMsg}<span class="hint inline">{rescanMsg}</span>{/if}
             </div>
             <p class="hint">Downloads are saved to your non-removable folder and indexed automatically.</p>
+
+            <h2 class="section-gap">Resolve</h2>
+            <label for="bin-name">Import bin name</label>
+            <div class="key-row">
+                <input id="bin-name" type="text" bind:value={binNameInput} spellcheck="false" />
+                <button onclick={saveBinName}>{keySaved ? 'Saved' : 'Save'}</button>
+            </div>
+            <div class="folder-actions section-gap-sm">
+                <button onclick={exportAttributions}>Export attribution list…</button>
+                {#if exportMsg}<span class="hint inline">{exportMsg}</span>{/if}
+            </div>
+            <p class="hint">Exports credits for the sounds you imported into the current Resolve project.</p>
         </section>
     {/if}
 
@@ -265,7 +343,16 @@
                 <p class="hint">No results.</p>
             {:else}
                 {#each response.results as r (keyFor(r))}
-                    <div class="result" class:playing={playingId === keyFor(r)}>
+                    <!-- svelte-ignore a11y_no_static_element_interactions -->
+                    <!-- Drag-out is an enhancement; the Import button is the accessible path. -->
+                    <div
+                        class="result"
+                        class:playing={playingId === keyFor(r)}
+                        class:draggable={!!r.extra?.['localPath']}
+                        draggable={!!r.extra?.['localPath']}
+                        ondragstart={(e) => onDragStart(r, e)}
+                        title={r.extra?.['localPath'] ? 'Drag onto the Resolve timeline, or use Import' : undefined}
+                    >
                         <button class="play" onclick={() => togglePlay(r)} title="Preview">
                             {playingId === keyFor(r) ? '⏸' : '▶'}
                         </button>
@@ -309,6 +396,17 @@
                                         {:else}
                                             <button class="mini" onclick={() => downloadResult(r)}>Download</button>
                                         {/if}
+                                    {/if}
+                                    {#if importStatus[keyFor(r)]?.startsWith('in ')}
+                                        <span class="ok-text" title="Imported into your Resolve Media Pool">{importStatus[keyFor(r)]} ✓</span>
+                                    {:else if importStatus[keyFor(r)] === 'importing'}
+                                        <span class="hint inline">importing…</span>
+                                    {:else if importStatus[keyFor(r)] === 'login needed'}
+                                        <span class="warn-text" title="Full download needs login (OAuth, a later phase)">login needed</span>
+                                    {:else if importStatus[keyFor(r)]}
+                                        <span class="warn-text" title={importStatus[keyFor(r)]}>import failed</span>
+                                    {:else}
+                                        <button class="mini primary" onclick={() => importResult(r)}>Import</button>
                                     {/if}
                                 </span>
                             </div>
@@ -565,6 +663,20 @@
         padding: 2px 8px;
         font-size: 10px;
         border-radius: 4px;
+    }
+    .mini.primary {
+        background: #33465f;
+        color: #fff;
+        border-color: #5a7aa5;
+    }
+    .result.draggable {
+        cursor: grab;
+    }
+    .result.draggable:active {
+        cursor: grabbing;
+    }
+    .section-gap-sm {
+        margin-top: 8px;
     }
     .ok-text {
         color: #7fcf7f;

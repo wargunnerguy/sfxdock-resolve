@@ -29,9 +29,33 @@ export interface ProjectManager {
 export interface ResolveProject {
     GetName(): Promise<string>;
     GetUniqueId(): Promise<string>;
+    GetMediaPool(): Promise<MediaPool | null>;
+}
+
+export interface MediaPool {
+    GetRootFolder(): Promise<ResolveFolder | null>;
+    AddSubFolder(parent: ResolveFolder, name: string): Promise<ResolveFolder | null>;
+    SetCurrentFolder(folder: ResolveFolder): Promise<boolean>;
+    ImportMedia(paths: string[]): Promise<MediaPoolItem[] | null>;
+}
+
+export interface ResolveFolder {
+    GetName(): Promise<string>;
+    GetSubFolderList(): Promise<ResolveFolder[]>;
+}
+
+export interface MediaPoolItem {
+    GetName(): Promise<string>;
 }
 
 export interface ProjectSnapshot {
     projectName: string | null;
     projectId: string | null;
+}
+
+export interface ImportResult {
+    ok: boolean;
+    binName: string;
+    clipName?: string;
+    error?: string;
 }

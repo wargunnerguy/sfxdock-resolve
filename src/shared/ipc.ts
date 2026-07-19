@@ -17,6 +17,11 @@ export const IPC = {
     addWatchedFolder: 'sfxdock:add-watched-folder',
     removeWatchedFolder: 'sfxdock:remove-watched-folder',
     rescan: 'sfxdock:rescan',
+    importToResolve: 'sfxdock:import-to-resolve',
+    exportAttributions: 'sfxdock:export-attributions',
+    getBinName: 'sfxdock:get-bin-name',
+    setBinName: 'sfxdock:set-bin-name',
+    startDrag: 'sfxdock:start-drag',
 } as const;
 
 export interface SearchResponse {
@@ -44,6 +49,17 @@ export interface RescanView {
     scannedFolders: number;
 }
 
+export type ImportOutcome =
+    | { status: 'ok'; binName: string; clipName?: string }
+    | { status: 'login-required'; message: string }
+    | { status: 'error'; message: string };
+
+export type ExportOutcome =
+    | { status: 'ok'; filePath: string; count: number }
+    | { status: 'empty' }
+    | { status: 'cancelled' }
+    | { status: 'error'; message: string };
+
 export interface ConnectionState {
     connected: boolean;
     productName?: string;
@@ -68,4 +84,10 @@ export interface SfxdockApi {
     addWatchedFolder(): Promise<FoldersView>;
     removeWatchedFolder(id: number): Promise<FoldersView>;
     rescan(): Promise<RescanView>;
+    importToResolve(sound: SoundResult, query: string): Promise<ImportOutcome>;
+    exportAttributions(): Promise<ExportOutcome>;
+    getBinName(): Promise<string>;
+    setBinName(name: string): Promise<string>;
+    /** Begins a native OS file drag of an already-on-disk sound (fire-and-forget). */
+    startDrag(filePath: string): void;
 }

@@ -49,6 +49,25 @@ describe('Library downloads + dedupe', () => {
         expect(lib.searchLocal('door').length).toBe(1);
     });
 
+    it('records per-project imports and lists them in import order', () => {
+        const a = lib.recordDownload(sampleDownload({ sourceId: 'a', title: 'A' }));
+        const b = lib.recordDownload(sampleDownload({ sourceId: 'b', title: 'B' }));
+        lib.recordDownload(sampleDownload({ sourceId: 'c', title: 'C' })); // never imported
+        lib.recordImport('proj-1', a.id);
+        lib.recordImport('proj-1', b.id);
+        lib.recordImport('proj-2', b.id);
+        expect(lib.importsForProject('proj-1').map((d) => d.title)).toEqual(['A', 'B']);
+        expect(lib.importsForProject('proj-2').map((d) => d.title)).toEqual(['B']);
+        expect(lib.importsForProject('proj-unknown')).toHaveLength(0);
+    });
+
+    it('a repeated import into the same project is idempotent', () => {
+        const a = lib.recordDownload(sampleDownload());
+        lib.recordImport('proj-1', a.id);
+        lib.recordImport('proj-1', a.id);
+        expect(lib.importsForProject('proj-1')).toHaveLength(1);
+    });
+
     it('lists only attribution-required downloads', () => {
         lib.recordDownload(sampleDownload()); // CC0, not required
         lib.recordDownload(

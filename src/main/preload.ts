@@ -18,6 +18,11 @@ const api: SfxdockApi = {
     addWatchedFolder: () => ipcRenderer.invoke(IPC.addWatchedFolder),
     removeWatchedFolder: (id) => ipcRenderer.invoke(IPC.removeWatchedFolder, id),
     rescan: () => ipcRenderer.invoke(IPC.rescan),
+    importToResolve: (sound, query) => ipcRenderer.invoke(IPC.importToResolve, sound, query),
+    exportAttributions: () => ipcRenderer.invoke(IPC.exportAttributions),
+    getBinName: () => ipcRenderer.invoke(IPC.getBinName),
+    setBinName: (name) => ipcRenderer.invoke(IPC.setBinName, name),
+    startDrag: (filePath) => ipcRenderer.send(IPC.startDrag, filePath),
 };
 
 contextBridge.exposeInMainWorld('sfxdock', api);

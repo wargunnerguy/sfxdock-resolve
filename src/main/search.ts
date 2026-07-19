@@ -49,9 +49,50 @@ export async function runSearch(
     // Library-first: Owned results (local + already-downloaded) above remote ones.
     merged.results.sort((a, b) => (a.badge === 'owned' ? 0 : 1) - (b.badge === 'owned' ? 0 : 1));
 
+    // Attach a localPath to results already on disk so the renderer can drag them out.
+    for (const r of merged.results) {
+        if (r.providerId === LOCAL_PROVIDER_ID) {
+            r.extra = { ...r.extra, localPath: r.extra?.['filePath'] };
+        } else if (r.badge === 'owned') {
+            const rec = library.getDownloadBySource(r.providerId, r.soundId);
+            if (rec) r.extra = { ...r.extra, localPath: rec.filePath };
+        }
+    }
+
     cache.registerPreviewUrls(merged.results);
     void cache.prefetch(merged.results.filter((r) => r.providerId !== LOCAL_PROVIDER_ID));
     return merged;
+}
+
+export interface LocalFileResult {
+    status: 'ok' | 'login-required' | 'error';
+    filePath?: string;
+    downloadId?: number;
+    message?: string;
+}
+
+/** Resolves a sound to an on-disk file, downloading it first if needed and allowed. */
+export async function ensureLocalFile(sound: SoundResult, query: string): Promise<LocalFileResult> {
+    if (sound.providerId === LOCAL_PROVIDER_ID) {
+        const fp = sound.extra?.['filePath'] as string | undefined;
+        return fp ? { status: 'ok', filePath: fp } : { status: 'error', message: 'Local file path missing' };
+    }
+    const existing = library.getDownloadBySource(sound.providerId, sound.soundId);
+    if (existing) return { status: 'ok', filePath: existing.filePath, downloadId: existing.id };
+
+    const outcome = await download(sound, query);
+    if (outcome.status === 'ok' || outcome.status === 'already-owned') {
+        const rec = library.getDownloadBySource(sound.providerId, sound.soundId);
+        return rec
+            ? { status: 'ok', filePath: rec.filePath, downloadId: rec.id }
+            : { status: 'error', message: 'Download record missing after download' };
+    }
+    if (outcome.status === 'login-required') return { status: 'login-required', message: outcome.message };
+    return { status: 'error', message: 'message' in outcome ? outcome.message : 'Download failed' };
+}
+
+export function getLibrary(): Library {
+    return library;
 }
 
 export async function download(sound: SoundResult, query: string): Promise<DownloadOutcome> {

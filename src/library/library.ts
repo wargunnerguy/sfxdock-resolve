@@ -131,11 +131,32 @@ export class Library implements LocalIndex {
         return this.getDownloadBySource(entry.providerId, entry.sourceId)!;
     }
 
-    /** All downloads that require attribution — for per-project export (Phase 5). */
+    /** All downloads that require attribution (project-agnostic). */
     attributions(): DownloadRecord[] {
         const rows = this.db
             .prepare('SELECT * FROM downloads WHERE attribution_required = 1 ORDER BY downloaded_at')
             .all() as unknown as DownloadRow[];
+        return rows.map((r) => this.mapDownload(r));
+    }
+
+    // ---- per-project imports (attribution export) ----
+
+    recordImport(projectId: string, downloadId: number): void {
+        this.db
+            .prepare('INSERT OR IGNORE INTO imports (project_id, download_id, imported_at) VALUES (?, ?, ?)')
+            .run(projectId, downloadId, Date.now());
+    }
+
+    /** Downloads imported into a given Resolve project, in import order. */
+    importsForProject(projectId: string): DownloadRecord[] {
+        const rows = this.db
+            .prepare(
+                `SELECT d.* FROM downloads d
+                 JOIN imports i ON i.download_id = d.id
+                 WHERE i.project_id = ?
+                 ORDER BY i.imported_at`,
+            )
+            .all(projectId) as unknown as DownloadRow[];
         return rows.map((r) => this.mapDownload(r));
     }
 
