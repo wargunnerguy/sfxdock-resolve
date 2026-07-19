@@ -10,9 +10,10 @@ import { settings } from './settings';
 import type { Library } from '../library/library';
 import type { DownloadRecord } from '../library/types';
 
-// 1x1 transparent PNG — a valid non-empty drag icon (Electron requires one).
+// 24x24 solid PNG — Electron rejects an empty drag icon, so this is a real,
+// non-transparent image.
 const DRAG_ICON = nativeImage.createFromDataURL(
-    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQAY3Y2wAAAAAElFTkSuQmCC',
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAJUlEQVR4nGMwdov/T0vMMGrBqAWjFoxaMGrBqAWjFoxaMDQsAADjqCP9K8M8kQAAAABJRU5ErkJggg==',
 );
 
 // Must run before app ready: the preview protocol needs stream privileges.

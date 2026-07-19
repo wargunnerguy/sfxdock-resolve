@@ -160,7 +160,7 @@ Phase plan and current status
 
 
 
-Current phase: Phase 4 — complete. Next: Phase 5.
+Current phase: Phase 5 — complete. Next: Phase 6.
 
 
 
@@ -229,4 +229,8 @@ Decisions log
 | 2026-07-19 | Local file previews stream from disk through the same sfx-preview:// protocol (file: URLs handled directly, uncached); local waveforms decoded client-side via Web Audio (RenderedWaveform) | Phase 4 decision |
 | 2026-07-19 | Downloads folder defaults to Documents/SFXDock (findable — Phase 6 wizard points users to add it to Resolve's Sound Library), pre-registered as the non-removable watched folder | Phase 4 decision |
 | 2026-07-19 | Embedding license/attribution metadata INTO downloaded files (ID3 etc.) deferred past Phase 4 — attribution is fully captured in the SQLite index and copy/export; file-embedding lands with the Sound Library wizard work | Phase 4 scope note |
+| 2026-07-20 | Import to Media Pool verified in Resolve (AddSubFolder/SetCurrentFolder/ImportMedia via bridge.importToBin); bins matched-or-created by configurable name (SFX default) | Phase 5 finding |
+| 2026-07-20 | Native drag-out (webContents.startDrag) into the Resolve timeline WORKS — but the drag icon must be a real non-empty nativeImage; an empty/1x1-transparent icon silently no-ops the whole drag | Phase 5 finding |
+| 2026-07-20 | Import = download-then-import (into Resolve); Download = save-to-library only (owned/offline, no Media Pool). Kept as distinct actions per the product's library-vs-project split; Import is the primary button. Revisit if users find it redundant | Phase 5 decision (maintainer raised the overlap) |
+| 2026-07-20 | Per-project attribution export: imports table links downloads to the project GetUniqueId; export writes a credit .txt for sounds imported into the current project only | Phase 5 decision |
 

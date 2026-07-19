@@ -394,7 +394,10 @@
                                         {:else if itemStatus[keyFor(r)]}
                                             <span class="warn-text" title={itemStatus[keyFor(r)]}>failed</span>
                                         {:else}
-                                            <button class="mini" onclick={() => downloadResult(r)}>Download</button>
+                                            <button
+                                                class="mini"
+                                                title="Save to your local library (owned, offline) without adding it to Resolve"
+                                                onclick={() => downloadResult(r)}>Download</button>
                                         {/if}
                                     {/if}
                                     {#if importStatus[keyFor(r)]?.startsWith('in ')}
@@ -406,7 +409,10 @@
                                     {:else if importStatus[keyFor(r)]}
                                         <span class="warn-text" title={importStatus[keyFor(r)]}>import failed</span>
                                     {:else}
-                                        <button class="mini primary" onclick={() => importResult(r)}>Import</button>
+                                        <button
+                                            class="mini primary"
+                                            title="Add to your Resolve Media Pool bin (downloads first if needed)"
+                                            onclick={() => importResult(r)}>Import</button>
                                     {/if}
                                 </span>
                             </div>
