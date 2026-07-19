@@ -22,6 +22,13 @@ export const IPC = {
     getBinName: 'sfxdock:get-bin-name',
     setBinName: 'sfxdock:set-bin-name',
     startDrag: 'sfxdock:start-drag',
+    getCompact: 'sfxdock:get-compact',
+    setCompact: 'sfxdock:set-compact',
+    setWindowSize: 'sfxdock:set-window-size',
+    closeWindow: 'sfxdock:close-window',
+    minimizeWindow: 'sfxdock:minimize-window',
+    getFollowResolve: 'sfxdock:get-follow-resolve',
+    setFollowResolve: 'sfxdock:set-follow-resolve',
 } as const;
 
 export interface SearchResponse {
@@ -90,4 +97,13 @@ export interface SfxdockApi {
     setBinName(name: string): Promise<string>;
     /** Begins a native OS file drag of an already-on-disk sound (fire-and-forget). */
     startDrag(filePath: string): void;
+    getCompact(): Promise<boolean>;
+    setCompact(compact: boolean): Promise<void>;
+    /** Resizes the plugin window in place (keeps its top-left position). */
+    setWindowSize(width: number, height: number): void;
+    closeWindow(): void;
+    minimizeWindow(): void;
+    /** Windows only: keep the window at a fixed offset from Resolve's window. Returns the effective state. */
+    getFollowResolve(): Promise<boolean>;
+    setFollowResolve(follow: boolean): Promise<boolean>;
 }

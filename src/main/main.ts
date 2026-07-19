@@ -7,6 +7,7 @@ import { ResolveBridge } from '../resolve/bridge';
 import { PreviewCache } from './preview-cache';
 import { attributionFor, download, ensureLocalFile, getLibrary, initSearch, registry, runSearch } from './search';
 import { settings } from './settings';
+import { ResolveFollower } from './follow-resolve';
 import type { Library } from '../library/library';
 import type { DownloadRecord } from '../library/types';
 
@@ -27,6 +28,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 const previewCache = new PreviewCache();
+const follower = new ResolveFollower(() => win);
 let library: Library;
 let downloadsDir: string;
 
@@ -59,6 +61,7 @@ function shutdown(): void {
         clearInterval(pollTimer);
         pollTimer = null;
     }
+    follower.stop();
     const forceExit = setTimeout(() => app.exit(0), 800);
     forceExit.unref?.();
     app.quit();
@@ -101,11 +104,21 @@ function createWindow(): void {
         minWidth: 360,
         minHeight: 480,
         title: 'SFXDock',
+        // Frameless: SFXDock draws its own chrome so compact mode can be a
+        // borderless floating bar (frame can't be toggled after creation).
+        frame: false,
         autoHideMenuBar: true,
+        backgroundColor: '#1e1e1e',
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
         },
     });
+    // Compact preference persists across launches; apply frame-independent state early.
+    if (settings.getCompact()) {
+        win.setMinimumSize(300, 70);
+        win.setAlwaysOnTop(true, 'floating');
+        win.setSize(380, 84);
+    }
     win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
     win.on('closed', () => {
         win = null;
@@ -221,6 +234,35 @@ app.whenReady().then(() => {
             event.sender.startDrag({ file: filePath, icon: DRAG_ICON });
         }
     });
+
+    ipcMain.handle(IPC.getCompact, () => settings.getCompact());
+    ipcMain.handle(IPC.setCompact, (_event, compact: boolean) => {
+        settings.setCompact(Boolean(compact));
+        if (!win) return;
+        if (compact) {
+            win.setMinimumSize(300, 70);
+            win.setAlwaysOnTop(true, 'floating');
+        } else {
+            win.setMinimumSize(360, 480);
+        }
+    });
+    ipcMain.on(IPC.setWindowSize, (_event, width: number, height: number) => {
+        if (win && Number.isFinite(width) && Number.isFinite(height)) {
+            win.setSize(Math.round(width), Math.round(height));
+        }
+    });
+    ipcMain.on(IPC.closeWindow, () => win?.close());
+    ipcMain.on(IPC.minimizeWindow, () => win?.minimize());
+
+    ipcMain.handle(IPC.getFollowResolve, () => follower.active);
+    ipcMain.handle(IPC.setFollowResolve, (_event, follow: boolean) => {
+        if (process.platform !== 'win32') return false; // Windows-only in v1
+        settings.setFollowResolve(Boolean(follow));
+        if (follow) follower.start();
+        else follower.stop();
+        return follower.active;
+    });
+    if (settings.getFollowResolve()) follower.start();
 
     createWindow();
     void refreshState();

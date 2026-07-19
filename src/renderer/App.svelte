@@ -33,6 +33,9 @@
     let binName = $state('SFX');
     let binNameInput = $state('');
     let exportMsg = $state('');
+    let compact = $state(false);
+    let followResolve = $state(false);
+    let searchInput = $state<HTMLInputElement | undefined>();
 
     const audio = new Audio();
     audio.addEventListener('ended', () => (playingId = null));
@@ -50,8 +53,32 @@
             binName = n;
             binNameInput = n;
         });
+        window.sfxdock.getCompact().then((c) => {
+            compact = c;
+            window.sfxdock?.setCompact(c); // re-apply min-size / always-on-top to match persisted state
+        });
+        window.sfxdock.getFollowResolve().then((f) => (followResolve = f));
         return window.sfxdock.onStateChanged((s) => (conn = s));
     });
+
+    const hasResults = $derived(!!response && response.results.length > 0);
+
+    // In compact mode the window auto-fits: just the search bar, or taller when results show.
+    $effect(() => {
+        if (!window.sfxdock || !compact) return;
+        window.sfxdock.setWindowSize(380, hasResults ? 470 : 84);
+    });
+
+    async function toggleCompact() {
+        compact = !compact;
+        await window.sfxdock?.setCompact(compact);
+        if (!compact) {
+            window.sfxdock?.setWindowSize(420, 640);
+        } else {
+            showSettings = false;
+            searchInput?.focus();
+        }
+    }
 
     const hasFreesoundKey = $derived(keyStatus['freesound'] === true);
     const hasJamendoKey = $derived(keyStatus['jamendo'] === true);
@@ -134,6 +161,11 @@
         if (!p) return;
         e.preventDefault();
         window.sfxdock?.startDrag(p);
+    }
+
+    async function toggleFollow() {
+        if (!window.sfxdock) return;
+        followResolve = await window.sfxdock.setFollowResolve(!followResolve);
     }
 
     async function saveBinName() {
@@ -220,25 +252,38 @@
     };
 </script>
 
-<main>
-    <header>
-        <h1>SFXDock</h1>
-        <div class="header-buttons">
-            <button
-                class="icon-btn"
-                class:active={showSettings}
-                onclick={() => (showSettings = !showSettings)}
-                title="Settings"
-            >
-                Settings
-            </button>
-            <button class="icon-btn" class:active={pinned} onclick={togglePin} title="Keep window on top">
-                {pinned ? 'Pinned' : 'Pin'}
-            </button>
+<main class:compact>
+    {#if compact}
+        <div class="compact-handle">
+            <span class="grip" title="Drag to move"></span>
+            <div class="compact-controls">
+                <button class="win-btn" onclick={toggleCompact} title="Expand to full view">⤢</button>
+                <button class="win-btn close" onclick={() => window.sfxdock?.closeWindow()} title="Close">×</button>
+            </div>
         </div>
-    </header>
+    {:else}
+        <header>
+            <h1>SFXDock</h1>
+            <div class="header-buttons">
+                <button class="icon-btn" onclick={toggleCompact} title="Compact floating bar">Compact</button>
+                <button
+                    class="icon-btn"
+                    class:active={showSettings}
+                    onclick={() => (showSettings = !showSettings)}
+                    title="Settings"
+                >
+                    Settings
+                </button>
+                <button class="icon-btn" class:active={pinned} onclick={togglePin} title="Keep window on top">
+                    {pinned ? 'Pinned' : 'Pin'}
+                </button>
+                <button class="win-btn" onclick={() => window.sfxdock?.minimizeWindow()} title="Minimize">–</button>
+                <button class="win-btn close" onclick={() => window.sfxdock?.closeWindow()} title="Close">×</button>
+            </div>
+        </header>
+    {/if}
 
-    {#if showSettings}
+    {#if showSettings && !compact}
         <section class="settings">
             <h2>Provider keys</h2>
             <label for="fs-key">
@@ -304,27 +349,42 @@
                 {#if exportMsg}<span class="hint inline">{exportMsg}</span>{/if}
             </div>
             <p class="hint">Exports credits for the sounds you imported into the current Resolve project.</p>
+
+            <div class="folder-actions section-gap">
+                <button class:active-btn={followResolve} onclick={toggleFollow}>
+                    {followResolve ? 'Following Resolve ✓' : 'Follow Resolve window'}
+                </button>
+            </div>
+            <p class="hint">
+                Keeps this window at a fixed offset from Resolve as you move it. Position the window where you want it
+                first, then enable. (Windows only.)
+            </p>
         </section>
     {/if}
 
     <section class="search">
         <div class="search-row">
             <input
+                bind:this={searchInput}
                 type="text"
                 bind:value={query}
                 onkeydown={(e) => e.key === 'Enter' && runSearch()}
                 placeholder="Search sounds and music…"
                 spellcheck="false"
             />
-            <button onclick={runSearch} disabled={searching || query.trim() === ''}>
-                {searching ? '…' : 'Search'}
-            </button>
+            {#if !compact}
+                <button onclick={runSearch} disabled={searching || query.trim() === ''}>
+                    {searching ? '…' : 'Search'}
+                </button>
+            {/if}
         </div>
-        <div class="filter-row">
-            <button class="chip" class:active={contentFilter === 'all'} onclick={() => setFilter('all')}>All</button>
-            <button class="chip" class:active={contentFilter === 'sfx'} onclick={() => setFilter('sfx')}>SFX</button>
-            <button class="chip" class:active={contentFilter === 'music'} onclick={() => setFilter('music')}>Music</button>
-        </div>
+        {#if !compact}
+            <div class="filter-row">
+                <button class="chip" class:active={contentFilter === 'all'} onclick={() => setFilter('all')}>All</button>
+                <button class="chip" class:active={contentFilter === 'sfx'} onclick={() => setFilter('sfx')}>SFX</button>
+                <button class="chip" class:active={contentFilter === 'music'} onclick={() => setFilter('music')}>Music</button>
+            </div>
+        {/if}
         {#if !hasAnyKey && !showSettings}
             <p class="hint">No provider keys set — open Settings to add a Freesound key (SFX) or Jamendo client ID (music).</p>
         {/if}
@@ -421,7 +481,7 @@
                 {/each}
             {/if}
         </section>
-    {:else}
+    {:else if !compact}
         <section class="status" class:ok={conn.connected}>
             {#if conn.connected}
                 <span class="dot ok-dot"></span> {conn.productName} · {conn.projectName ?? '(no project)'}
@@ -431,13 +491,15 @@
         </section>
     {/if}
 
-    <footer>
-        {#if conn.connected && response}
-            {conn.projectName ?? ''} · SFXDock 0.1.0
-        {:else}
-            SFXDock 0.1.0 — Phase 3
-        {/if}
-    </footer>
+    {#if !compact}
+        <footer>
+            {#if conn.connected && response}
+                {conn.projectName ?? ''} · SFXDock 0.1.0
+            {:else}
+                SFXDock 0.1.0
+            {/if}
+        </footer>
+    {/if}
 </main>
 
 <style>
@@ -448,6 +510,61 @@
         height: 100vh;
         padding: 12px;
         box-sizing: border-box;
+    }
+    main.compact {
+        gap: 6px;
+        padding: 6px 8px 8px;
+    }
+    main.compact .search input {
+        font-size: 14px;
+    }
+
+    /* Frameless chrome: the header/handle are OS drag regions; interactive
+       elements inside opt out so they stay clickable. */
+    header {
+        -webkit-app-region: drag;
+    }
+    header button {
+        -webkit-app-region: no-drag;
+    }
+    .compact-handle {
+        -webkit-app-region: drag;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 16px;
+        margin: -2px -2px 2px;
+    }
+    .grip {
+        width: 34px;
+        height: 4px;
+        border-radius: 2px;
+        background: #4a4a4a;
+        margin-left: 6px;
+    }
+    .compact-controls {
+        display: flex;
+        gap: 2px;
+        -webkit-app-region: no-drag;
+    }
+    .win-btn {
+        -webkit-app-region: no-drag;
+        background: transparent;
+        border: none;
+        color: #aaa;
+        font-size: 14px;
+        line-height: 1;
+        padding: 2px 7px;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    .win-btn:hover {
+        background: #333;
+        color: #fff;
+    }
+    .win-btn.close:hover {
+        background: #a33;
+        color: #fff;
     }
     header {
         display: flex;
@@ -674,6 +791,11 @@
         background: #33465f;
         color: #fff;
         border-color: #5a7aa5;
+    }
+    .active-btn {
+        background: #3a5f3a;
+        color: #fff;
+        border-color: #5a8f5a;
     }
     .result.draggable {
         cursor: grab;

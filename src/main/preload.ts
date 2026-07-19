@@ -23,6 +23,13 @@ const api: SfxdockApi = {
     getBinName: () => ipcRenderer.invoke(IPC.getBinName),
     setBinName: (name) => ipcRenderer.invoke(IPC.setBinName, name),
     startDrag: (filePath) => ipcRenderer.send(IPC.startDrag, filePath),
+    getCompact: () => ipcRenderer.invoke(IPC.getCompact),
+    setCompact: (compact) => ipcRenderer.invoke(IPC.setCompact, compact),
+    setWindowSize: (width, height) => ipcRenderer.send(IPC.setWindowSize, width, height),
+    closeWindow: () => ipcRenderer.send(IPC.closeWindow),
+    minimizeWindow: () => ipcRenderer.send(IPC.minimizeWindow),
+    getFollowResolve: () => ipcRenderer.invoke(IPC.getFollowResolve),
+    setFollowResolve: (follow) => ipcRenderer.invoke(IPC.setFollowResolve, follow),
 };
 
 contextBridge.exposeInMainWorld('sfxdock', api);

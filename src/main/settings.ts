@@ -10,10 +10,12 @@ import path from 'node:path';
 interface SettingsShape {
     providerKeys: Record<string, string>;
     binName: string;
+    compact: boolean;
+    followResolve: boolean;
 }
 
 const DEFAULT_BIN = 'SFX';
-const DEFAULTS: SettingsShape = { providerKeys: {}, binName: DEFAULT_BIN };
+const DEFAULTS: SettingsShape = { providerKeys: {}, binName: DEFAULT_BIN, compact: false, followResolve: false };
 
 class Settings {
     private file = path.join(app.getPath('userData'), 'sfxdock-settings.json');
@@ -34,6 +36,24 @@ class Settings {
 
     setBinName(name: string): void {
         this.data.binName = name.trim() || DEFAULT_BIN;
+        this.save();
+    }
+
+    getCompact(): boolean {
+        return this.data.compact === true;
+    }
+
+    setCompact(compact: boolean): void {
+        this.data.compact = compact;
+        this.save();
+    }
+
+    getFollowResolve(): boolean {
+        return this.data.followResolve === true;
+    }
+
+    setFollowResolve(follow: boolean): void {
+        this.data.followResolve = follow;
         this.save();
     }
 
