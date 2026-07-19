@@ -114,7 +114,7 @@ Coding conventions
 
 TypeScript everywhere (main, renderer, providers, library). Strict mode on.
 
-Renderer: Svelte 5 (runes) built with Vite — established in Phase 1; do not introduce a second framework. TypeScript pinned to 5.x (svelte-check 4 is incompatible with TypeScript 7).
+Renderer: Svelte 5 (runes) built with Vite — established in Phase 1; do not introduce a second framework. TypeScript pinned to 5.x (svelte-check 4 is incompatible with TypeScript 7). IMPORTANT: wrap any $state-derived object in $state.snapshot() before sending it over Electron IPC — a raw reactive proxy fails structured clone (Phase 4 bug). Do clipboard writes in the main process (Electron clipboard module), not navigator.clipboard.
 
 SQLite via the runtime's built-in node:sqlite (DatabaseSync) — Phase 4 decision, replacing the tentative better-sqlite3 plan. Verified working with no flag under both Electron 36.3.2 (Resolve's runtime, SQLite 3.49.1) and the test runner's Node. This eliminates the native-module rebuild / Electron-ABI-lock risk the Phase 0 audit flagged entirely — nothing to rebuild when Resolve bumps Electron. node:sqlite is experimental in Node 22, so re-verify on Resolve updates (the sqlite-probe pattern in scratch/).
 
@@ -160,7 +160,7 @@ Phase plan and current status
 
 
 
-Current phase: Phase 3 — complete. Next: Phase 4.
+Current phase: Phase 4 — complete. Next: Phase 5.
 
 
 

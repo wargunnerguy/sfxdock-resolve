@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, protocol } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, protocol } from 'electron';
 import path from 'node:path';
 import { IPC, type ConnectionState, type FoldersView } from '../shared/ipc';
 import type { SoundResult } from '../providers/core/types';
@@ -143,7 +143,11 @@ app.whenReady().then(() => {
     });
 
     ipcMain.handle(IPC.download, (_event, sound: SoundResult, query: string) => download(sound, String(query)));
-    ipcMain.handle(IPC.getAttribution, (_event, sound: SoundResult) => attributionFor(sound));
+    ipcMain.handle(IPC.copyAttribution, (_event, sound: SoundResult) => {
+        const text = attributionFor(sound);
+        clipboard.writeText(text);
+        return text;
+    });
 
     ipcMain.handle(IPC.listWatchedFolders, () => foldersView());
     ipcMain.handle(IPC.addWatchedFolder, async () => {

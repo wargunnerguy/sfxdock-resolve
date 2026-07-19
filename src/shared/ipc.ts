@@ -12,7 +12,7 @@ export const IPC = {
     getKeyStatus: 'sfxdock:get-key-status',
     setProviderKey: 'sfxdock:set-provider-key',
     download: 'sfxdock:download',
-    getAttribution: 'sfxdock:get-attribution',
+    copyAttribution: 'sfxdock:copy-attribution',
     listWatchedFolders: 'sfxdock:list-watched-folders',
     addWatchedFolder: 'sfxdock:add-watched-folder',
     removeWatchedFolder: 'sfxdock:remove-watched-folder',
@@ -62,7 +62,8 @@ export interface SfxdockApi {
     getKeyStatus(): Promise<KeyStatus>;
     setProviderKey(providerId: string, key: string): Promise<KeyStatus>;
     download(sound: SoundResult, query: string): Promise<DownloadOutcome>;
-    getAttribution(sound: SoundResult): Promise<string>;
+    /** Builds the attribution line and copies it to the system clipboard (in main). Returns the text. */
+    copyAttribution(sound: SoundResult): Promise<string>;
     listWatchedFolders(): Promise<FoldersView>;
     addWatchedFolder(): Promise<FoldersView>;
     removeWatchedFolder(id: number): Promise<FoldersView>;

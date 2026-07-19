@@ -64,7 +64,8 @@
         itemStatus = { ...itemStatus, [id]: 'downloading' };
         let outcome: DownloadOutcome;
         try {
-            outcome = await window.sfxdock.download(r, lastQuery);
+            // $state.snapshot: reactive proxies can't be structured-cloned across IPC.
+            outcome = await window.sfxdock.download($state.snapshot(r), lastQuery);
         } catch (e) {
             outcome = { status: 'error', message: e instanceof Error ? e.message : String(e) };
         }
@@ -82,9 +83,9 @@
 
     async function copyAttribution(r: SoundResult) {
         if (!window.sfxdock) return;
-        const text = await window.sfxdock.getAttribution(r);
         try {
-            await navigator.clipboard.writeText(text);
+            // Snapshot to avoid cloning the reactive proxy; clipboard write happens in main.
+            await window.sfxdock.copyAttribution($state.snapshot(r));
             itemStatus = { ...itemStatus, [keyFor(r)]: 'copied' };
             setTimeout(() => (itemStatus = { ...itemStatus, [keyFor(r)]: '' }), 1800);
         } catch {
