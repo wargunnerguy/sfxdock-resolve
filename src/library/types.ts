@@ -38,7 +38,8 @@ export interface LocalSearchHit {
     title: string;
     author: string | null;
     durationSec: number;
-    format: string;
+    /** Ready-built quality/format label (e.g. "44.1kHz · 16-bit · WAV", "MP3"). */
+    quality?: string;
     filePath: string;
     /** License URL/id, or '' for a plain watched-folder file the user owns. */
     license: string;

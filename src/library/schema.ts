@@ -1,7 +1,7 @@
 // Schema + migrations for the SQLite library index. Bump SCHEMA_VERSION and
 // add a migration step when the shape changes.
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export const MIGRATIONS: string[] = [
     // v1
@@ -57,5 +57,10 @@ export const MIGRATIONS: string[] = [
         imported_at INTEGER NOT NULL,
         PRIMARY KEY (project_id, download_id)
     );
+    `,
+    // v3 — cheap header-read quality for watched WAV/AIFF files.
+    `
+    ALTER TABLE local_files ADD COLUMN sample_rate REAL;
+    ALTER TABLE local_files ADD COLUMN bit_depth INTEGER;
     `,
 ];

@@ -18,35 +18,50 @@ export function formatOf(filePath: string): string {
     return dot < 0 ? '' : filePath.slice(dot + 1).toLowerCase();
 }
 
-/** Returns duration in seconds for WAV/AIFF via header math, else null. */
-export function readDurationSec(filePath: string): number | null {
+export interface AudioMeta {
+    durationSec: number | null;
+    sampleRate: number | null;
+    bitDepth: number | null;
+}
+
+const EMPTY_META: AudioMeta = { durationSec: null, sampleRate: null, bitDepth: null };
+
+/** Header-only metadata for WAV/AIFF (duration + sample rate + bit depth); nulls otherwise. */
+export function readAudioMeta(filePath: string): AudioMeta {
     try {
         const fd = fs.openSync(filePath, 'r');
         try {
             const head = Buffer.alloc(64);
             const read = fs.readSync(fd, head, 0, 64, 0);
-            if (read < 12) return null;
+            if (read < 12) return EMPTY_META;
             const riff = head.toString('ascii', 0, 4);
             if (riff === 'RIFF' && head.toString('ascii', 8, 12) === 'WAVE') {
-                return readWavDuration(fd);
+                return readWavMeta(fd);
             }
             if (riff === 'FORM' && head.toString('ascii', 8, 12).startsWith('AIF')) {
-                return readAiffDuration(fd);
+                return readAiffMeta(fd);
             }
-            return null;
+            return EMPTY_META;
         } finally {
             fs.closeSync(fd);
         }
     } catch {
-        return null;
+        return EMPTY_META;
     }
 }
 
-// Walk RIFF chunks for fmt (sample rate, channels, bits) and data (size).
-function readWavDuration(fd: number): number | null {
+/** Convenience: just the duration (used where only length matters). */
+export function readDurationSec(filePath: string): number | null {
+    return readAudioMeta(filePath).durationSec;
+}
+
+// Walk RIFF chunks for fmt (sample rate, bits) and data (size).
+function readWavMeta(fd: number): AudioMeta {
     const size = fs.fstatSync(fd).size;
     let offset = 12;
     let byteRate = 0;
+    let sampleRate = 0;
+    let bitDepth = 0;
     let dataBytes = 0;
     const chunkHeader = Buffer.alloc(8);
     while (offset + 8 <= size) {
@@ -56,17 +71,22 @@ function readWavDuration(fd: number): number | null {
         if (id === 'fmt ') {
             const fmt = Buffer.alloc(16);
             fs.readSync(fd, fmt, 0, 16, offset + 8);
+            sampleRate = fmt.readUInt32LE(4);
             byteRate = fmt.readUInt32LE(8);
+            bitDepth = fmt.readUInt16LE(14);
         } else if (id === 'data') {
             dataBytes = chunkSize;
         }
         offset += 8 + chunkSize + (chunkSize % 2);
     }
-    if (byteRate > 0 && dataBytes > 0) return dataBytes / byteRate;
-    return null;
+    return {
+        durationSec: byteRate > 0 && dataBytes > 0 ? dataBytes / byteRate : null,
+        sampleRate: sampleRate || null,
+        bitDepth: bitDepth || null,
+    };
 }
 
-function readAiffDuration(fd: number): number | null {
+function readAiffMeta(fd: number): AudioMeta {
     const size = fs.fstatSync(fd).size;
     let offset = 12;
     const chunkHeader = Buffer.alloc(8);
@@ -78,13 +98,17 @@ function readAiffDuration(fd: number): number | null {
             const comm = Buffer.alloc(18);
             fs.readSync(fd, comm, 0, 18, offset + 8);
             const numFrames = comm.readUInt32BE(2);
+            const bitDepth = comm.readUInt16BE(6);
             const sampleRate = read80BitFloat(comm.subarray(8, 18));
-            if (sampleRate > 0) return numFrames / sampleRate;
-            return null;
+            return {
+                durationSec: sampleRate > 0 ? numFrames / sampleRate : null,
+                sampleRate: sampleRate ? Math.round(sampleRate) : null,
+                bitDepth: bitDepth || null,
+            };
         }
         offset += 8 + chunkSize + (chunkSize % 2);
     }
-    return null;
+    return EMPTY_META;
 }
 
 // AIFF stores sample rate as an 80-bit IEEE extended float.

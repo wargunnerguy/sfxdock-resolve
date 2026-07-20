@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { ContentType } from '../providers/core/types';
 import { MIGRATIONS, SCHEMA_VERSION } from './schema';
-import { isAudioFile, formatOf, readDurationSec } from './audio-meta';
+import { isAudioFile, formatOf, readAudioMeta } from './audio-meta';
 import { searchText, tokenize } from './tokenize';
 import type {
     DownloadRecord,
@@ -205,18 +205,22 @@ export class Library implements LocalIndex {
                 // Index the name stem only — the extension lives in `format`, so
                 // searching "wav" doesn't spuriously match every wav's name.
                 const stem = path.basename(filePath, path.extname(filePath));
+                const meta = readAudioMeta(filePath);
                 this.db
                     .prepare(
-                        `INSERT OR IGNORE INTO local_files (folder_id, file_path, filename, search_text, duration_sec, format)
-                         VALUES (?, ?, ?, ?, ?, ?)`,
+                        `INSERT OR IGNORE INTO local_files
+                         (folder_id, file_path, filename, search_text, duration_sec, format, sample_rate, bit_depth)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
                     )
                     .run(
                         folder.id,
                         filePath,
                         filename,
                         searchText(stem),
-                        readDurationSec(filePath),
+                        meta.durationSec,
                         formatOf(filePath),
+                        meta.sampleRate,
+                        meta.bitDepth,
                     );
                 added++;
             }
@@ -243,7 +247,7 @@ export class Library implements LocalIndex {
                 title: row.title,
                 author: row.author,
                 durationSec: row.duration_sec,
-                format: row.format,
+                quality: localQuality(row.format, null, null),
                 filePath: row.file_path,
                 license: row.license_url ?? '',
                 licenseName: row.license_name,
@@ -261,6 +265,8 @@ export class Library implements LocalIndex {
             search_text: string;
             duration_sec: number | null;
             format: string;
+            sample_rate: number | null;
+            bit_depth: number | null;
         }>;
         for (const row of localRows) {
             if (seenPaths.has(row.file_path)) continue;
@@ -270,7 +276,7 @@ export class Library implements LocalIndex {
                 title: row.filename,
                 author: null,
                 durationSec: row.duration_sec ?? 0,
-                format: row.format,
+                quality: localQuality(row.format, row.sample_rate, row.bit_depth),
                 filePath: row.file_path,
                 license: '',
                 licenseName: 'Local file',
@@ -302,6 +308,20 @@ export class Library implements LocalIndex {
             downloadedAt: row.downloaded_at,
         };
     }
+}
+
+const LOSSLESS_FORMATS = new Set(['wav', 'wave', 'aiff', 'aif', 'flac']);
+
+// Builds a quality label; kHz + bit-depth for lossless files that have them.
+function localQuality(format: string, sampleRate: number | null, bitDepth: number | null): string | undefined {
+    const type = (format || '').toUpperCase();
+    const parts: string[] = [];
+    if (LOSSLESS_FORMATS.has(format.toLowerCase())) {
+        if (sampleRate) parts.push(`${(sampleRate / 1000).toFixed(1).replace(/\.0$/, '')}kHz`);
+        if (bitDepth) parts.push(`${bitDepth}-bit`);
+    }
+    if (type) parts.push(type);
+    return parts.length > 0 ? parts.join(' · ') : undefined;
 }
 
 // Recursive audio-file walk. Skips unreadable dirs so one bad folder can't

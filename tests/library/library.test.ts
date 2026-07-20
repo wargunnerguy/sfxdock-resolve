@@ -156,6 +156,29 @@ describe('Library watched folders + rescan', () => {
         expect(lib.searchLocal('b').map((h) => h.title)).toEqual(['b.wav']);
     });
 
+    it('reads sample rate + bit depth from a real WAV header into the quality label', () => {
+        // Minimal 44.1kHz / 16-bit / mono WAV with a tiny data chunk.
+        const sampleRate = 44100;
+        const buf = Buffer.alloc(44 + 8);
+        buf.write('RIFF', 0);
+        buf.writeUInt32LE(36 + 8, 4);
+        buf.write('WAVE', 8);
+        buf.write('fmt ', 12);
+        buf.writeUInt32LE(16, 16);
+        buf.writeUInt16LE(1, 20);
+        buf.writeUInt16LE(1, 22);
+        buf.writeUInt32LE(sampleRate, 24);
+        buf.writeUInt32LE(sampleRate * 2, 28);
+        buf.writeUInt16LE(2, 32);
+        buf.writeUInt16LE(16, 34);
+        buf.write('data', 36);
+        buf.writeUInt32LE(8, 40);
+        fs.writeFileSync(path.join(tmp, 'Real Tone.wav'), buf);
+        lib.addWatchedFolder(tmp);
+        lib.rescan();
+        expect(lib.searchLocal('real')[0]!.quality).toBe('44.1kHz · 16-bit · WAV');
+    });
+
     it('removing a watched folder drops its indexed files', () => {
         fs.writeFileSync(path.join(tmp, 'gone.wav'), 'x');
         const folder = lib.addWatchedFolder(tmp)!;

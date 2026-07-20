@@ -9,7 +9,7 @@ const fakeHit: LocalSearchHit = {
     title: 'Owned Door',
     author: 'me',
     durationSec: 3,
-    format: 'wav',
+    quality: '44.1kHz · 16-bit · WAV',
     filePath: 'C:/sfx/door.wav',
     license: 'http://creativecommons.org/licenses/by/4.0/',
     licenseName: 'Creative Commons Attribution 4.0',
