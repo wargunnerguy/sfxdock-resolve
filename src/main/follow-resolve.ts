@@ -1,10 +1,12 @@
-// Optional "follow Resolve" positioning (Windows only). Keeps the plugin
-// window at a fixed offset from Resolve's main window as Resolve moves.
+// Optional "follow Resolve" positioning (Windows only). Moves the plugin
+// window by the same delta whenever Resolve's window moves — so it tracks
+// Resolve, but stays put (and stays freely draggable) when Resolve doesn't
+// move. Tracking deltas rather than locking an absolute offset means dragging
+// the panel yourself sticks instead of snapping back.
 //
 // Electron can't read another app's window bounds, and we deliberately ship no
 // native modules, so a tiny persistent PowerShell helper reports Resolve's
-// window rect via user32 GetWindowRect. The offset is captured when following
-// starts, so the user positions the bar once and it sticks relative to Resolve.
+// window rect via user32 GetWindowRect.
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
@@ -41,7 +43,7 @@ while ($true) {
 export class ResolveFollower {
     private proc: ChildProcess | null = null;
     private scriptFile: string | null = null;
-    private offset: { x: number; y: number } | null = null;
+    private lastResolve: { x: number; y: number } | null = null;
     private buf = '';
 
     constructor(private getWin: () => BrowserWindow | null) {}
@@ -52,7 +54,7 @@ export class ResolveFollower {
 
     start(): void {
         if (this.proc || process.platform !== 'win32') return;
-        this.offset = null; // recaptured from the first rect, preserving current placement
+        this.lastResolve = null; // first rect just seeds the baseline; no move
         try {
             this.scriptFile = path.join(os.tmpdir(), `sfxdock-follow-${process.pid}.ps1`);
             fs.writeFileSync(this.scriptFile, PS_SCRIPT);
@@ -81,7 +83,7 @@ export class ResolveFollower {
             fs.rm(this.scriptFile, { force: true }, () => undefined);
             this.scriptFile = null;
         }
-        this.offset = null;
+        this.lastResolve = null;
     }
 
     private onData(chunk: string): void {
@@ -97,19 +99,21 @@ export class ResolveFollower {
     private apply(line: string): void {
         const win = this.getWin();
         if (!win || line === '' || line === 'none') return;
-        const [l, t] = line.split(',').map((n) => parseInt(n, 10));
+        const parts = line.split(',');
+        const l = parseInt(parts[0] ?? '', 10);
+        const t = parseInt(parts[1] ?? '', 10);
         if (!Number.isFinite(l) || !Number.isFinite(t)) return;
 
-        const pos = win.getPosition();
-        const px = pos[0] ?? 0;
-        const py = pos[1] ?? 0;
-        if (!this.offset) {
-            // Preserve wherever the user has the window right now.
-            this.offset = { x: px - l!, y: py - t! };
+        if (!this.lastResolve) {
+            this.lastResolve = { x: l, y: t };
             return;
         }
-        const nx = l! + this.offset.x;
-        const ny = t! + this.offset.y;
-        if (px !== nx || py !== ny) win.setPosition(nx, ny);
+        const dx = l - this.lastResolve.x;
+        const dy = t - this.lastResolve.y;
+        this.lastResolve = { x: l, y: t };
+        if (dx === 0 && dy === 0) return; // Resolve didn't move — leave the panel alone
+
+        const pos = win.getPosition();
+        win.setPosition((pos[0] ?? 0) + dx, (pos[1] ?? 0) + dy);
     }
 }
