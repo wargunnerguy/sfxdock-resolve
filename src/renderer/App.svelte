@@ -887,7 +887,10 @@
         top: 0;
         left: 0;
         height: 34px;
-        background: rgba(130, 170, 230, 0.22);
+        /* Screen blend brightens the underlying waveform so the played part
+           reads as a distinctly lit, colored region. */
+        background: #4a86e8;
+        mix-blend-mode: screen;
         border-radius: 3px 0 0 3px;
         pointer-events: none;
     }
@@ -896,7 +899,8 @@
         top: 0;
         height: 34px;
         width: 2px;
-        background: #9fc0ff;
+        background: #dbe7ff;
+        box-shadow: 0 0 4px rgba(219, 231, 255, 0.8);
         pointer-events: none;
     }
     .icon-btn.glyph {
