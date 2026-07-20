@@ -7,6 +7,13 @@ import type { WatchedFolder } from '../library/types';
 export type ResultField = 'duration' | 'quality' | 'author' | 'provider';
 export type ResultFields = Record<ResultField, boolean>;
 
+/** OAuth connection status per provider that supports it. */
+export interface AuthStatus {
+    freesound: boolean;
+}
+
+export type ConnectOutcome = { ok: true } | { ok: false; error: string };
+
 export const IPC = {
     getState: 'sfxdock:get-state',
     setPinned: 'sfxdock:set-pinned',
@@ -34,6 +41,11 @@ export const IPC = {
     setFollowResolve: 'sfxdock:set-follow-resolve',
     getResultFields: 'sfxdock:get-result-fields',
     setResultField: 'sfxdock:set-result-field',
+    getFreesoundClientId: 'sfxdock:get-freesound-client-id',
+    setFreesoundClientId: 'sfxdock:set-freesound-client-id',
+    getAuthStatus: 'sfxdock:get-auth-status',
+    connectFreesound: 'sfxdock:connect-freesound',
+    disconnectFreesound: 'sfxdock:disconnect-freesound',
 } as const;
 
 export interface SearchResponse {
@@ -113,4 +125,9 @@ export interface SfxdockApi {
     setFollowResolve(follow: boolean): Promise<boolean>;
     getResultFields(): Promise<ResultFields>;
     setResultField(field: ResultField, show: boolean): Promise<ResultFields>;
+    getFreesoundClientId(): Promise<string>;
+    setFreesoundClientId(id: string): Promise<string>;
+    getAuthStatus(): Promise<AuthStatus>;
+    connectFreesound(): Promise<ConnectOutcome>;
+    disconnectFreesound(): Promise<AuthStatus>;
 }

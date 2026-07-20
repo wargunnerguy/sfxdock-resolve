@@ -32,6 +32,11 @@ const api: SfxdockApi = {
     setFollowResolve: (follow) => ipcRenderer.invoke(IPC.setFollowResolve, follow),
     getResultFields: () => ipcRenderer.invoke(IPC.getResultFields),
     setResultField: (field, show) => ipcRenderer.invoke(IPC.setResultField, field, show),
+    getFreesoundClientId: () => ipcRenderer.invoke(IPC.getFreesoundClientId),
+    setFreesoundClientId: (id) => ipcRenderer.invoke(IPC.setFreesoundClientId, id),
+    getAuthStatus: () => ipcRenderer.invoke(IPC.getAuthStatus),
+    connectFreesound: () => ipcRenderer.invoke(IPC.connectFreesound),
+    disconnectFreesound: () => ipcRenderer.invoke(IPC.disconnectFreesound),
 };
 
 contextBridge.exposeInMainWorld('sfxdock', api);

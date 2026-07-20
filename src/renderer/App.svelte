@@ -38,6 +38,10 @@
     let compact = $state(false);
     let followResolve = $state(false);
     let resultFields = $state<ResultFields>({ duration: true, quality: true, author: false, provider: true });
+    let freesoundClientId = $state('');
+    let freesoundConnected = $state(false);
+    let connecting = $state(false);
+    let connectMsg = $state('');
     let searchInput = $state<HTMLInputElement | undefined>();
 
     const FIELD_LABELS: Record<ResultField, string> = {
@@ -97,6 +101,8 @@
         });
         window.sfxdock.getFollowResolve().then((f) => (followResolve = f));
         window.sfxdock.getResultFields().then((f) => (resultFields = f));
+        window.sfxdock.getFreesoundClientId().then((id) => (freesoundClientId = id));
+        window.sfxdock.getAuthStatus().then((a) => (freesoundConnected = a.freesound));
         return window.sfxdock.onStateChanged((s) => (conn = s));
     });
 
@@ -206,6 +212,33 @@
     async function toggleFollow() {
         if (!window.sfxdock) return;
         followResolve = await window.sfxdock.setFollowResolve(!followResolve);
+    }
+
+    async function connectFreesound() {
+        if (!window.sfxdock || connecting) return;
+        await window.sfxdock.setFreesoundClientId(freesoundClientId);
+        connecting = true;
+        connectMsg = 'Opening your browser to authorize…';
+        try {
+            const res = await window.sfxdock.connectFreesound();
+            if (res.ok) {
+                freesoundConnected = true;
+                connectMsg = 'Connected to Freesound ✓';
+                if (response) void runSearch(); // refresh badges (Login required → Free)
+            } else {
+                connectMsg = `Could not connect: ${res.error}`;
+            }
+        } finally {
+            connecting = false;
+            setTimeout(() => (connectMsg = ''), 6000);
+        }
+    }
+
+    async function disconnectFreesound() {
+        if (!window.sfxdock) return;
+        const status = await window.sfxdock.disconnectFreesound();
+        freesoundConnected = status.freesound;
+        if (response) void runSearch();
     }
 
     async function saveBinName() {
@@ -389,6 +422,38 @@
                 <button onclick={() => saveKey('freesound', freesoundKeyInput)}>{keySaved ? 'Saved' : 'Save'}</button>
             </div>
             <p class="hint">Get a free key at freesound.org/apiv2/apply</p>
+
+            <label for="fs-cid" class="second-key">
+                Freesound Client ID <span class="tag">full-quality downloads</span>
+                {#if freesoundConnected}<span class="key-ok">connected</span>{/if}
+            </label>
+            <div class="key-row">
+                <input
+                    id="fs-cid"
+                    type="text"
+                    bind:value={freesoundClientId}
+                    placeholder="Freesound OAuth Client ID"
+                    spellcheck="false"
+                />
+            </div>
+            <div class="folder-actions section-gap-sm">
+                {#if freesoundConnected}
+                    <button onclick={disconnectFreesound}>Disconnect Freesound</button>
+                {:else}
+                    <button
+                        class="primary"
+                        onclick={connectFreesound}
+                        disabled={connecting || !freesoundClientId || !hasFreesoundKey}
+                    >
+                        {connecting ? 'Connecting…' : 'Connect Freesound'}
+                    </button>
+                {/if}
+                {#if connectMsg}<span class="hint inline">{connectMsg}</span>{/if}
+            </div>
+            <p class="hint">
+                Set your Freesound app's Callback URL to <strong>http://localhost:8910/callback</strong>, then Connect to
+                enable full-quality Freesound downloads.
+            </p>
 
             <label for="jm-key" class="second-key">
                 Jamendo client ID <span class="tag">music</span>
@@ -974,7 +1039,8 @@
         font-size: 10px;
         border-radius: 4px;
     }
-    .mini.primary {
+    .mini.primary,
+    button.primary {
         background: #33465f;
         color: #fff;
         border-color: #5a7aa5;

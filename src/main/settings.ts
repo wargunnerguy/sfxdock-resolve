@@ -11,6 +11,8 @@ import type { ResultField, ResultFields } from '../shared/ipc';
 
 interface SettingsShape {
     providerKeys: Record<string, string>;
+    /** Freesound OAuth Client ID (its API key, stored as providerKeys.freesound, is the client secret). */
+    freesoundClientId: string;
     binName: string;
     compact: boolean;
     followResolve: boolean;
@@ -22,6 +24,7 @@ const DEFAULT_BIN = 'SFX';
 const DEFAULT_FIELDS: ResultFields = { duration: true, quality: true, author: false, provider: true };
 const DEFAULTS: SettingsShape = {
     providerKeys: {},
+    freesoundClientId: '',
     binName: DEFAULT_BIN,
     compact: false,
     followResolve: false,
@@ -44,6 +47,15 @@ class Settings {
         } catch {
             this.data = { ...DEFAULTS, providerKeys: {}, resultFields: { ...DEFAULT_FIELDS } };
         }
+    }
+
+    getFreesoundClientId(): string {
+        return this.data.freesoundClientId ?? '';
+    }
+
+    setFreesoundClientId(id: string): void {
+        this.data.freesoundClientId = id.trim();
+        this.save();
     }
 
     getResultFields(): ResultFields {

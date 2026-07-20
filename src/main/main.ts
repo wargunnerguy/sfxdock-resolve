@@ -12,7 +12,17 @@ import {
 import type { SoundResult } from '../providers/core/types';
 import { ResolveBridge } from '../resolve/bridge';
 import { PreviewCache } from './preview-cache';
-import { attributionFor, download, ensureLocalFile, getLibrary, initSearch, registry, runSearch } from './search';
+import {
+    attributionFor,
+    download,
+    ensureLocalFile,
+    freesoundOAuthConfig,
+    getLibrary,
+    initSearch,
+    oauth,
+    registry,
+    runSearch,
+} from './search';
 import { settings } from './settings';
 import { ResolveFollower } from './follow-resolve';
 import type { Library } from '../library/library';
@@ -265,6 +275,25 @@ app.whenReady().then(() => {
     ipcMain.handle(IPC.setResultField, (_event, field: ResultField, show: boolean) =>
         settings.setResultField(field, Boolean(show)),
     );
+
+    ipcMain.handle(IPC.getFreesoundClientId, () => settings.getFreesoundClientId());
+    ipcMain.handle(IPC.setFreesoundClientId, (_event, id: string) => {
+        settings.setFreesoundClientId(String(id));
+        return settings.getFreesoundClientId();
+    });
+    ipcMain.handle(IPC.getAuthStatus, () => ({ freesound: oauth.isConnected('freesound') }));
+    ipcMain.handle(IPC.connectFreesound, async () => {
+        try {
+            await oauth.connect(freesoundOAuthConfig());
+            return { ok: true as const };
+        } catch (e) {
+            return { ok: false as const, error: e instanceof Error ? e.message : String(e) };
+        }
+    });
+    ipcMain.handle(IPC.disconnectFreesound, () => {
+        oauth.disconnect('freesound');
+        return { freesound: oauth.isConnected('freesound') };
+    });
 
     ipcMain.handle(IPC.getFollowResolve, () => follower.active);
     ipcMain.handle(IPC.setFollowResolve, (_event, follow: boolean) => {

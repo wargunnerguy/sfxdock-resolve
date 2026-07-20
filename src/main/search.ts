@@ -12,11 +12,25 @@ import { Library } from '../library/library';
 import type { PreviewCache } from './preview-cache';
 import { settings } from './settings';
 import { downloadSound } from './downloads';
+import { OAuthManager, type OAuthConfig } from './oauth';
 import type { DownloadOutcome, SearchResponse } from '../shared/ipc';
 
 export const registry = new ProviderRegistry();
+export const oauth = new OAuthManager();
 let library: Library;
 let downloadsDir: string;
+
+export function freesoundOAuthConfig(): OAuthConfig {
+    return {
+        providerId: 'freesound',
+        clientId: settings.getFreesoundClientId(),
+        clientSecret: settings.getProviderKey('freesound') ?? '',
+        authorizeUrl: 'https://freesound.org/apiv2/oauth2/authorize/',
+        tokenUrl: 'https://freesound.org/apiv2/oauth2/access_token/',
+        redirectPort: 8910,
+        redirectPath: '/callback',
+    };
+}
 
 export function initSearch(): { library: Library; downloadsDir: string } {
     downloadsDir = path.join(app.getPath('documents'), 'SFXDock');
@@ -32,7 +46,7 @@ export function initSearch(): { library: Library; downloadsDir: string } {
 function ctxFor(provider: Provider): ProviderContext {
     return {
         apiKey: settings.getProviderKey(provider.id),
-        hasOAuth: false, // Phase 6
+        hasOAuth: provider.id === 'freesound' && oauth.isConnected('freesound'),
         fetch,
     };
 }
@@ -98,7 +112,11 @@ export function getLibrary(): Library {
 export async function download(sound: SoundResult, query: string): Promise<DownloadOutcome> {
     const provider = registry.get(sound.providerId);
     if (!provider) return { status: 'error', message: `Unknown provider: ${sound.providerId}` };
-    return downloadSound(sound, query, provider, ctxFor(provider), library, downloadsDir);
+    const authToken =
+        provider.downloadAuthType === 'oauth2' && provider.id === 'freesound'
+            ? await oauth.getAccessToken(freesoundOAuthConfig())
+            : null;
+    return downloadSound(sound, query, provider, ctxFor(provider), library, downloadsDir, authToken);
 }
 
 export function attributionFor(sound: SoundResult): string {
