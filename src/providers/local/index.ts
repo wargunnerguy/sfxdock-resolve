@@ -31,6 +31,7 @@ export function createLocalProvider(index: LocalIndex): Provider {
                 author: hit.author ?? undefined,
                 durationSec: hit.durationSec,
                 license: hit.license || 'local-file',
+                quality: hit.format ? hit.format.toUpperCase() : undefined,
                 // file:// URL — the preview protocol streams it straight from disk.
                 previewUrl: pathToFileUrl(hit.filePath),
                 waveform: { type: 'render' },

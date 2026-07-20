@@ -6,6 +6,8 @@
         SearchResponse,
         DownloadOutcome,
         ImportOutcome,
+        ResultField,
+        ResultFields,
     } from '../shared/ipc';
     import type { ContentType, SoundResult } from '../providers/core/types';
     import WaveformPeaks from './WaveformPeaks.svelte';
@@ -35,7 +37,16 @@
     let exportMsg = $state('');
     let compact = $state(false);
     let followResolve = $state(false);
+    let resultFields = $state<ResultFields>({ duration: true, quality: true, author: false, provider: true });
     let searchInput = $state<HTMLInputElement | undefined>();
+
+    const FIELD_LABELS: Record<ResultField, string> = {
+        quality: 'Quality',
+        duration: 'Duration',
+        provider: 'Source',
+        author: 'Uploader',
+    };
+    const FIELD_ORDER: ResultField[] = ['quality', 'duration', 'provider', 'author'];
 
     let playProgress = $state(0); // 0..1 position of the currently playing sound
     let playingDuration = 0; // seconds; from the result (streamed audio often has no duration metadata)
@@ -85,15 +96,17 @@
             window.sfxdock?.setCompact(c); // re-apply min-size / always-on-top to match persisted state
         });
         window.sfxdock.getFollowResolve().then((f) => (followResolve = f));
+        window.sfxdock.getResultFields().then((f) => (resultFields = f));
         return window.sfxdock.onStateChanged((s) => (conn = s));
     });
 
     const hasResults = $derived(!!response && response.results.length > 0);
 
-    // In compact mode the window auto-fits: just the search bar + filter, or taller when results show.
+    // In compact mode the window auto-fits: filters+controls on one line, then
+    // the search bar; taller when results show.
     $effect(() => {
         if (!window.sfxdock || !compact) return;
-        window.sfxdock.setWindowSize(380, hasResults ? 480 : 100);
+        window.sfxdock.setWindowSize(380, hasResults ? 470 : 78);
     });
 
     async function toggleCompact() {
@@ -293,6 +306,21 @@
         return `${m}:${String(s).padStart(2, '0')}`;
     }
 
+    // The meta line under each result, built from the user's enabled fields.
+    function metaParts(r: SoundResult): string[] {
+        const parts: string[] = [];
+        if (resultFields.quality && r.quality) parts.push(r.quality);
+        if (resultFields.duration) parts.push(formatDuration(r.durationSec));
+        if (resultFields.provider) parts.push(r.providerId);
+        if (resultFields.author && r.author) parts.push(r.author);
+        return parts;
+    }
+
+    async function toggleResultField(field: ResultField) {
+        if (!window.sfxdock) return;
+        resultFields = await window.sfxdock.setResultField(field, !resultFields[field]);
+    }
+
     const BADGE_LABEL: Record<string, string> = {
         free: 'Free',
         'login-required': 'Login required',
@@ -304,7 +332,11 @@
 <main class:compact>
     {#if compact}
         <div class="compact-handle">
-            <span class="grip" title="Drag to move"></span>
+            <div class="mini-filters">
+                <button class="chip" class:active={contentFilter === 'all'} onclick={() => setFilter('all')}>All</button>
+                <button class="chip" class:active={contentFilter === 'sfx'} onclick={() => setFilter('sfx')}>SFX</button>
+                <button class="chip" class:active={contentFilter === 'music'} onclick={() => setFilter('music')}>Music</button>
+            </div>
             <div class="compact-controls">
                 <button class="win-btn" onclick={toggleCompact} title="Expand to full view">⤢</button>
                 <button class="win-btn close" onclick={() => window.sfxdock?.closeWindow()} title="Close">×</button>
@@ -373,6 +405,16 @@
                 <button onclick={() => saveKey('jamendo', jamendoKeyInput)}>{keySaved ? 'Saved' : 'Save'}</button>
             </div>
             <p class="hint">Get a free client ID at devportal.jamendo.com — keys are stored only on this computer.</p>
+
+            <h2 class="section-gap">Result info</h2>
+            <div class="field-toggles">
+                {#each FIELD_ORDER as f (f)}
+                    <button class="chip" class:active={resultFields[f]} onclick={() => toggleResultField(f)}>
+                        {FIELD_LABELS[f]}
+                    </button>
+                {/each}
+            </div>
+            <p class="hint">Tap to choose what shows under each result. Quality is on by default; uploader is off.</p>
 
             <h2 class="section-gap">Local folders</h2>
             <ul class="folder-list">
@@ -445,11 +487,13 @@
                 {searching ? '…' : '🔍'}
             </button>
         </div>
-        <div class="filter-row">
-            <button class="chip" class:active={contentFilter === 'all'} onclick={() => setFilter('all')}>All</button>
-            <button class="chip" class:active={contentFilter === 'sfx'} onclick={() => setFilter('sfx')}>SFX</button>
-            <button class="chip" class:active={contentFilter === 'music'} onclick={() => setFilter('music')}>Music</button>
-        </div>
+        {#if !compact}
+            <div class="filter-row">
+                <button class="chip" class:active={contentFilter === 'all'} onclick={() => setFilter('all')}>All</button>
+                <button class="chip" class:active={contentFilter === 'sfx'} onclick={() => setFilter('sfx')}>SFX</button>
+                <button class="chip" class:active={contentFilter === 'music'} onclick={() => setFilter('music')}>Music</button>
+            </div>
+        {/if}
         {#if !hasAnyKey && !showSettings && !compact}
             <p class="hint">No provider keys set — open Settings to add a Freesound key (SFX) or Jamendo client ID (music).</p>
         {/if}
@@ -511,11 +555,7 @@
                                 {/if}
                             </div>
                             <div class="result-meta">
-                                <span>
-                                    {formatDuration(r.durationSec)}
-                                    {#if r.author}· {r.author}{/if}
-                                    · {r.providerId}
-                                </span>
+                                <span>{metaParts(r).join(' · ')}</span>
                                 <span class="result-actions">
                                     {#if itemStatus[keyFor(r)] === 'copied'}
                                         <span class="ok-text">copied ✓</span>
@@ -642,15 +682,17 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        height: 16px;
-        margin: -2px -2px 2px;
+        gap: 8px;
+        margin: -1px -2px 0;
     }
-    .grip {
-        width: 34px;
-        height: 4px;
-        border-radius: 2px;
-        background: #4a4a4a;
-        margin-left: 6px;
+    .mini-filters {
+        display: flex;
+        gap: 4px;
+        -webkit-app-region: no-drag;
+    }
+    .mini-filters .chip {
+        padding: 1px 9px;
+        font-size: 10px;
     }
     .compact-controls {
         display: flex;
@@ -765,6 +807,11 @@
         display: flex;
         gap: 6px;
         margin-top: 8px;
+    }
+    .field-toggles {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
     }
     .chip {
         padding: 3px 14px;

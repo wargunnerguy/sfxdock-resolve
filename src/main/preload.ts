@@ -30,6 +30,8 @@ const api: SfxdockApi = {
     minimizeWindow: () => ipcRenderer.send(IPC.minimizeWindow),
     getFollowResolve: () => ipcRenderer.invoke(IPC.getFollowResolve),
     setFollowResolve: (follow) => ipcRenderer.invoke(IPC.setFollowResolve, follow),
+    getResultFields: () => ipcRenderer.invoke(IPC.getResultFields),
+    setResultField: (field, show) => ipcRenderer.invoke(IPC.setResultField, field, show),
 };
 
 contextBridge.exposeInMainWorld('sfxdock', api);

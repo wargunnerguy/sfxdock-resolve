@@ -107,6 +107,7 @@ export const jamendoProvider: Provider = {
                     author: track.artist_name,
                     durationSec: track.duration,
                     license: track.license_ccurl,
+                    quality: 'MP3',
                     previewUrl: track.audio,
                     waveform: peaks ? { type: 'peaks' as const, peaks } : { type: 'render' as const },
                     extra: { downloadUrl },

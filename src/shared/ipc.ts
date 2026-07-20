@@ -4,6 +4,9 @@ import type { ContentType, SoundResult } from '../providers/core/types';
 import type { ProviderFailure } from '../providers/core/registry';
 import type { WatchedFolder } from '../library/types';
 
+export type ResultField = 'duration' | 'quality' | 'author' | 'provider';
+export type ResultFields = Record<ResultField, boolean>;
+
 export const IPC = {
     getState: 'sfxdock:get-state',
     setPinned: 'sfxdock:set-pinned',
@@ -29,6 +32,8 @@ export const IPC = {
     minimizeWindow: 'sfxdock:minimize-window',
     getFollowResolve: 'sfxdock:get-follow-resolve',
     setFollowResolve: 'sfxdock:set-follow-resolve',
+    getResultFields: 'sfxdock:get-result-fields',
+    setResultField: 'sfxdock:set-result-field',
 } as const;
 
 export interface SearchResponse {
@@ -106,4 +111,6 @@ export interface SfxdockApi {
     /** Windows only: keep the window at a fixed offset from Resolve's window. Returns the effective state. */
     getFollowResolve(): Promise<boolean>;
     setFollowResolve(follow: boolean): Promise<boolean>;
+    getResultFields(): Promise<ResultFields>;
+    setResultField(field: ResultField, show: boolean): Promise<ResultFields>;
 }

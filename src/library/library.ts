@@ -243,6 +243,7 @@ export class Library implements LocalIndex {
                 title: row.title,
                 author: row.author,
                 durationSec: row.duration_sec,
+                format: row.format,
                 filePath: row.file_path,
                 license: row.license_url ?? '',
                 licenseName: row.license_name,
@@ -259,6 +260,7 @@ export class Library implements LocalIndex {
             filename: string;
             search_text: string;
             duration_sec: number | null;
+            format: string;
         }>;
         for (const row of localRows) {
             if (seenPaths.has(row.file_path)) continue;
@@ -268,6 +270,7 @@ export class Library implements LocalIndex {
                 title: row.filename,
                 author: null,
                 durationSec: row.duration_sec ?? 0,
+                format: row.format,
                 filePath: row.file_path,
                 license: '',
                 licenseName: 'Local file',

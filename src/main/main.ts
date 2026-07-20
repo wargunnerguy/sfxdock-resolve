@@ -1,7 +1,14 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, protocol } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import { IPC, type ConnectionState, type ExportOutcome, type FoldersView, type ImportOutcome } from '../shared/ipc';
+import {
+    IPC,
+    type ConnectionState,
+    type ExportOutcome,
+    type FoldersView,
+    type ImportOutcome,
+    type ResultField,
+} from '../shared/ipc';
 import type { SoundResult } from '../providers/core/types';
 import { ResolveBridge } from '../resolve/bridge';
 import { PreviewCache } from './preview-cache';
@@ -115,9 +122,9 @@ function createWindow(): void {
     });
     // Compact preference persists across launches; apply frame-independent state early.
     if (settings.getCompact()) {
-        win.setMinimumSize(300, 90);
+        win.setMinimumSize(300, 68);
         win.setAlwaysOnTop(true, 'floating');
-        win.setSize(380, 100);
+        win.setSize(380, 78);
     }
     win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
     win.on('closed', () => {
@@ -240,7 +247,7 @@ app.whenReady().then(() => {
         settings.setCompact(Boolean(compact));
         if (!win) return;
         if (compact) {
-            win.setMinimumSize(300, 90);
+            win.setMinimumSize(300, 68);
             win.setAlwaysOnTop(true, 'floating');
         } else {
             win.setMinimumSize(360, 480);
@@ -253,6 +260,11 @@ app.whenReady().then(() => {
     });
     ipcMain.on(IPC.closeWindow, () => win?.close());
     ipcMain.on(IPC.minimizeWindow, () => win?.minimize());
+
+    ipcMain.handle(IPC.getResultFields, () => settings.getResultFields());
+    ipcMain.handle(IPC.setResultField, (_event, field: ResultField, show: boolean) =>
+        settings.setResultField(field, Boolean(show)),
+    );
 
     ipcMain.handle(IPC.getFollowResolve, () => follower.active);
     ipcMain.handle(IPC.setFollowResolve, (_event, follow: boolean) => {

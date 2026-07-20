@@ -26,6 +26,8 @@ export interface RawSoundResult {
     durationSec: number;
     /** Provider-native license identifier (URL or id); mapped via licenseInfo(). */
     license: string;
+    /** Short human-readable quality/format label (e.g. "44.1kHz · 16-bit · WAV", "192kbps · MP3"). */
+    quality?: string;
     previewUrl: string;
     waveform: Waveform;
     /** Provider-private data carried through to getDownload/licenseInfo (e.g. a per-track download URL). */

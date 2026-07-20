@@ -38,6 +38,7 @@ export interface LocalSearchHit {
     title: string;
     author: string | null;
     durationSec: number;
+    format: string;
     filePath: string;
     /** License URL/id, or '' for a plain watched-folder file the user owns. */
     license: string;

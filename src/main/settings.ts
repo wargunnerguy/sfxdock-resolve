@@ -7,15 +7,26 @@ import { app } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import type { ResultField, ResultFields } from '../shared/ipc';
+
 interface SettingsShape {
     providerKeys: Record<string, string>;
     binName: string;
     compact: boolean;
     followResolve: boolean;
+    resultFields: ResultFields;
 }
 
 const DEFAULT_BIN = 'SFX';
-const DEFAULTS: SettingsShape = { providerKeys: {}, binName: DEFAULT_BIN, compact: false, followResolve: false };
+// Quality + duration + source shown by default; uploader off (per maintainer).
+const DEFAULT_FIELDS: ResultFields = { duration: true, quality: true, author: false, provider: true };
+const DEFAULTS: SettingsShape = {
+    providerKeys: {},
+    binName: DEFAULT_BIN,
+    compact: false,
+    followResolve: false,
+    resultFields: { ...DEFAULT_FIELDS },
+};
 
 class Settings {
     private file = path.join(app.getPath('userData'), 'sfxdock-settings.json');
@@ -24,10 +35,25 @@ class Settings {
     load(): void {
         try {
             const raw = JSON.parse(fs.readFileSync(this.file, 'utf8')) as Partial<SettingsShape>;
-            this.data = { ...DEFAULTS, ...raw, providerKeys: { ...raw.providerKeys } };
+            this.data = {
+                ...DEFAULTS,
+                ...raw,
+                providerKeys: { ...raw.providerKeys },
+                resultFields: { ...DEFAULT_FIELDS, ...raw.resultFields },
+            };
         } catch {
-            this.data = { ...DEFAULTS, providerKeys: {} };
+            this.data = { ...DEFAULTS, providerKeys: {}, resultFields: { ...DEFAULT_FIELDS } };
         }
+    }
+
+    getResultFields(): ResultFields {
+        return { ...this.data.resultFields };
+    }
+
+    setResultField(field: ResultField, show: boolean): ResultFields {
+        this.data.resultFields = { ...this.data.resultFields, [field]: show };
+        this.save();
+        return this.getResultFields();
     }
 
     getBinName(): string {

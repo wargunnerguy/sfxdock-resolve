@@ -14,8 +14,25 @@ import type {
 } from '../core/types';
 
 const API_BASE = 'https://freesound.org/apiv2';
-const FIELDS = 'id,name,username,duration,license,previews,images';
+const FIELDS = 'id,name,username,duration,license,previews,images,type,bitrate,bitdepth,samplerate';
 const DEFAULT_LIMIT = 30;
+
+const LOSSLESS = new Set(['wav', 'aiff', 'aif', 'flac']);
+
+function freesoundQuality(s: FreesoundSound): string | undefined {
+    const type = (s.type ?? '').toLowerCase();
+    const parts: string[] = [];
+    const khz = s.samplerate ? `${(s.samplerate / 1000).toFixed(1).replace(/\.0$/, '')}kHz` : '';
+    if (LOSSLESS.has(type)) {
+        if (khz) parts.push(khz);
+        if (s.bitdepth) parts.push(`${s.bitdepth}-bit`);
+    } else {
+        if (s.bitrate) parts.push(`${Math.round(s.bitrate)}kbps`);
+        if (khz) parts.push(khz);
+    }
+    if (type) parts.push(type.toUpperCase());
+    return parts.length > 0 ? parts.join(' · ') : undefined;
+}
 
 // Verified response shape (probed live 2026-07-19 against API v2).
 interface FreesoundSearchResponse {
@@ -31,6 +48,10 @@ interface FreesoundSound {
     license: string;
     previews: Record<string, string>;
     images: Record<string, string>;
+    type?: string;
+    bitrate?: number;
+    bitdepth?: number;
+    samplerate?: number;
 }
 
 export const freesoundProvider: Provider = {
@@ -81,6 +102,7 @@ export const freesoundProvider: Provider = {
                     author: sound.username,
                     durationSec: sound.duration,
                     license: sound.license,
+                    quality: freesoundQuality(sound),
                     previewUrl,
                     waveform: waveformUrl ? { type: 'provided' as const, url: waveformUrl } : { type: 'render' as const },
                 },
