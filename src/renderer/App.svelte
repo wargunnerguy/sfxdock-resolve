@@ -38,6 +38,7 @@
     let searchInput = $state<HTMLInputElement | undefined>();
 
     let playProgress = $state(0); // 0..1 position of the currently playing sound
+    let playingDuration = 0; // seconds; from the result (streamed audio often has no duration metadata)
 
     const audio = new Audio();
     let rafId = 0;
@@ -45,11 +46,17 @@
         if (rafId) cancelAnimationFrame(rafId);
         rafId = 0;
     }
+    function currentDuration(): number {
+        // Streamed previews frequently report Infinity/NaN, so trust the known length.
+        if (Number.isFinite(audio.duration) && audio.duration > 0) return audio.duration;
+        return playingDuration;
+    }
     function tick() {
-        if (playingId && audio.duration > 0) {
-            playProgress = audio.currentTime / audio.duration;
-            rafId = requestAnimationFrame(tick);
+        const dur = currentDuration();
+        if (playingId && dur > 0) {
+            playProgress = Math.min(1, audio.currentTime / dur);
         }
+        if (playingId) rafId = requestAnimationFrame(tick);
     }
     audio.addEventListener('ended', () => {
         playingId = null;
@@ -247,6 +254,7 @@
         }
         audio.src = `sfx-preview://${r.providerId}/${r.soundId}`;
         playProgress = 0;
+        playingDuration = r.durationSec || 0;
         void audio.play().catch(() => (playingId = null));
         playingId = id;
         stopTick();
@@ -255,11 +263,12 @@
 
     // Click a waveform to seek within the currently playing sound.
     function seek(r: SoundResult, e: MouseEvent) {
-        if (playingId !== keyFor(r) || !audio.duration) return;
+        const dur = currentDuration();
+        if (playingId !== keyFor(r) || dur <= 0) return;
         const el = e.currentTarget as HTMLElement;
         const rect = el.getBoundingClientRect();
         const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-        audio.currentTime = ratio * audio.duration;
+        audio.currentTime = ratio * dur;
         playProgress = ratio;
     }
 
@@ -410,9 +419,10 @@
     {/if}
 
     <section class="search">
-        <div class="search-row">
+        <div class="search-row" class:inline-search={compact}>
             <input
                 bind:this={searchInput}
+                class:with-inline-btn={compact}
                 type="text"
                 bind:value={query}
                 onkeydown={(e) => {
@@ -422,14 +432,14 @@
                 placeholder="Search sounds and music…"
                 spellcheck="false"
             />
-            {#if query || hasResults}
+            {#if !compact && (query || hasResults)}
                 <button class="icon-btn glyph" onclick={clearResults} title="Clear (Esc)" aria-label="Clear">×</button>
             {/if}
             <button
-                class="icon-btn glyph"
+                class="icon-btn glyph search-btn"
                 onclick={runSearch}
                 disabled={searching || query.trim() === ''}
-                title="Search"
+                title="Search (or press Enter)"
                 aria-label="Search"
             >
                 {searching ? '…' : '🔍'}
@@ -597,6 +607,26 @@
     }
     main.compact .chip {
         padding: 2px 10px;
+    }
+    /* Mini mode: the magnifier sits inside the input (Enter is the main path). */
+    .search-row.inline-search {
+        position: relative;
+    }
+    .search-row.inline-search input.with-inline-btn {
+        padding-right: 34px;
+    }
+    .search-row.inline-search .search-btn {
+        position: absolute;
+        right: 3px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: transparent;
+        border: none;
+        padding: 4px 6px;
+        opacity: 0.65;
+    }
+    .search-row.inline-search .search-btn:hover:not(:disabled) {
+        opacity: 1;
     }
 
     /* Frameless chrome: the header/handle are OS drag regions; interactive
